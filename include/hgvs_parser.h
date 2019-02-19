@@ -30,6 +30,8 @@ typedef struct HGVS_Node
         HGVS_Node_duplication,
         HGVS_Node_inversion,
         HGVS_Node_deletion,
+        HGVS_Node_deletion_insertion,
+        HGVS_Node_substitution,
     } HGVS_Node_Type;
 
     struct HGVS_Node* left;

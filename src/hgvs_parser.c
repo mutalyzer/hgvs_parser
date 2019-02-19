@@ -284,6 +284,30 @@ unknown(char const** const ptr)
 
 
 static HGVS_Node*
+number_or_unknown(char const** const ptr)
+{
+    HGVS_Node* node = unknown(ptr);
+    if (is_error(node))
+    {
+        return error(NULL, node, *ptr, "invalid number or unknown");
+    } // if
+    if (is_unmatched(node))
+    {
+        node = number(ptr);
+        if (is_error(node) ||
+            is_unmatched(node))
+        {
+            return error(NULL, node, *ptr, "invalid number or unknown");
+        } // if
+
+        return node;
+    } // if
+
+    return node;
+} // number_or_unknown
+
+
+static HGVS_Node*
 position(char const** const ptr)
 {
     HGVS_Node* const node = create(HGVS_Node_position);
@@ -292,19 +316,11 @@ position(char const** const ptr)
         return error_allocation(NULL);
     } // if
 
-    HGVS_Node* probe = unknown(ptr);
-    if (is_error(probe))
+    HGVS_Node* const probe = number_or_unknown(ptr);
+    if (is_error(probe) ||
+        is_unmatched(probe))
     {
         return error(node, probe, *ptr, "invalid position");
-    } // if
-    if (is_unmatched(probe))
-    {
-        probe = number(ptr);
-        if (is_error(probe) ||
-            is_unmatched(probe))
-        {
-            return error(node, probe, *ptr, "invalid position");
-        } // if
     } // if
 
     node->left = probe;
@@ -326,19 +342,11 @@ offset(char const** const ptr)
 
         node->data = HGVS_Node_negative;
 
-        HGVS_Node* probe = unknown(ptr);
-        if (is_error(probe))
+        HGVS_Node* probe = number_or_unknown(ptr);
+        if (is_error(probe) ||
+            is_unmatched(probe))
         {
             return error(node, probe, *ptr, "invalid offset");
-        } // if
-        if (is_unmatched(probe))
-        {
-            probe = number(ptr);
-            if (is_error(probe) ||
-                is_unmatched(probe))
-            {
-                return error(node, probe, *ptr, "invalid offset");
-            } // if
         } // if
 
         node->left = probe;
@@ -356,19 +364,11 @@ offset(char const** const ptr)
 
         node->data = HGVS_Node_positive;
 
-        HGVS_Node* probe = unknown(ptr);
-        if (is_error(probe))
+        HGVS_Node* probe = number_or_unknown(ptr);
+        if (is_error(probe) ||
+            is_unmatched(probe))
         {
             return error(node, probe, *ptr, "invalid offset");
-        } // if
-        if (is_unmatched(probe))
-        {
-            probe = number(ptr);
-            if (is_error(probe) ||
-                is_unmatched(probe))
-            {
-                return error(node, probe, *ptr, "invalid offset");
-            } // if
         } // if
 
         node->left = probe;
@@ -541,7 +541,7 @@ sequence(char const** const ptr)
         } // if
 
         node->data = len;
-        node->ptr  = *ptr;
+        node->ptr  = *ptr - len;
 
         return node;
     } // if
@@ -621,8 +621,107 @@ inversion(char const** const ptr)
         return node;
     } // if
 
-    return NULL;
+    return unmatched(NULL);
 } // inversion
+
+
+static HGVS_Node*
+substitution_or_repeat(char const** const ptr)
+{
+    HGVS_Node* probe = sequence(ptr);
+    if (is_error(probe))
+    {
+        return error(NULL, probe, *ptr, "invalid sequence");
+    } // if
+    if (is_unmatched(probe))
+    {
+        return unmatched(NULL);
+    } // if
+
+    if (match_char(ptr, '>'))
+    {
+        if (probe->data != 1)
+        {
+            return error(probe, NULL, *ptr, "one deleted NT");
+        } // if
+
+        HGVS_Node* const node = create(HGVS_Node_substitution);
+        if (is_error_allocation(node))
+        {
+            return error_allocation(probe);
+        } // if
+
+        node->left = probe;
+
+        probe = sequence(ptr);
+        if (is_error(probe) ||
+            is_unmatched(probe))
+        {
+            return error(node, probe, *ptr, "invalid substitution or repeat");
+        } // if
+
+        node->right = probe;
+
+        if (probe->data != 1)
+        {
+            return error (node, NULL, *ptr, "one inserted NT");
+        } // if
+
+        return node;
+    } // if
+
+    return unmatched(NULL); // ToDo: add repeat part
+} // substitution_or_repeat
+
+
+static HGVS_Node*
+inserted(char const** const ptr)
+{
+    return unmatched(NULL);
+} // inserted
+
+
+static HGVS_Node*
+deletion_or_deletion_insertion(char const** const ptr)
+{
+    if (match_string(ptr, "del"))
+    {
+        fprintf(stderr, "deletion\n");
+        HGVS_Node* probe = sequence_or_number(ptr);
+        if (is_error(probe))
+        {
+            return error(NULL, probe, *ptr, "invalid sequence or length");
+        } // if
+
+        HGVS_Node* const node = create(HGVS_Node_deletion);
+        if (is_error_allocation(node))
+        {
+            return error_allocation(NULL);
+        } // if
+
+        node->left = probe;
+
+        if (match_string(ptr, "ins"))
+        {
+            node->type = HGVS_Node_deletion_insertion;
+
+            probe = inserted(ptr);
+            if (is_error(probe) ||
+                is_unmatched(probe))
+            {
+                return error(node, probe, *ptr, "invalid inserted");
+            } // if
+
+            node->right = probe;
+
+            return node;
+        } // if
+
+        return node;
+    } // if
+
+    return unmatched(NULL);
+} // deletion_or_deletion_insertion
 
 
 static HGVS_Node*
@@ -642,6 +741,36 @@ variant(char const** const ptr)
     } // if
 
     node->left = probe;
+
+    probe = substitution_or_repeat(ptr);
+    if (is_error(probe))
+    {
+        return error(node, probe, *ptr, "invalid variant");
+    } // if
+    if (!is_unmatched(probe))
+    {
+        node->right = probe;
+
+        if (node->left->type != HGVS_Node_point &&
+            node->left->type != HGVS_Node_uncertain)
+        {
+            return error(node, NULL, *ptr, "expected point location");
+        } // if
+
+        return node;
+    } // if
+
+    probe = deletion_or_deletion_insertion(ptr);
+    if (is_error(probe))
+    {
+        return error(node, probe, *ptr, "invalid variant");
+    } // if
+    if (!is_unmatched(probe))
+    {
+        node->right = probe;
+        return node;
+    } // if
+
 
     probe = duplication(ptr);
     if (is_error(probe))
@@ -697,6 +826,11 @@ HGVS_parse(char const* const str)
     if (is_unmatched(node))
     {
         fprintf(stderr, "unmatched\n");
+    } // if
+
+    if (*ptr != '\0')
+    {
+        fprintf(stderr, "input left:  %s\n", ptr);
     } // if
 
     if (is_error(node))
