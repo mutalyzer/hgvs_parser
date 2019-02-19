@@ -410,17 +410,16 @@ inserted(char const** const ptr)
         return allocation_error(NULL);
     } // if
 
+    node->ptr = *ptr;
+    size_t len = 0;
+    if (match_IUPAC_NT(ptr, &len))
+    {
+        node->data.value = len;
+        return node;
+    } // if
     node->left = range(ptr);
     if (node->left == NULL)
     {
-        node->ptr = *ptr;
-        size_t len = 0;
-        if (match_IUPAC_NT(ptr, &len))
-        {
-            node->data.value = len;
-            return node;
-        } // if
-
         return parse_error(node, "invalid inserted");
     } // if
 
@@ -498,7 +497,7 @@ repeated(char const** const ptr)
 
 
 static HGVS_Node*
-substitution(char const** const ptr)
+substitution_or_repeat(char const** const ptr)
 {
     char const deleted = **ptr;
     size_t len = 0;
@@ -538,7 +537,7 @@ substitution(char const** const ptr)
     } // if
 
     return NULL;
-} // substitution
+} // substitution_or_repeat
 
 
 static HGVS_Node*
@@ -563,6 +562,11 @@ inserted_compound(char const** const ptr)
             tmp = tmp->right;
         } // while
 
+        if (!match_char(ptr, ']'))
+        {
+            return parse_error(node, "invalid inserted compound");
+        } // if
+
         return node;
     } // if
 
@@ -575,6 +579,7 @@ insertion(char const** const ptr)
 {
     if (match_string(ptr, "ins"))
     {
+        fprintf(stderr, "insertion\n");
         HGVS_Node* const node = create(HGVS_Node_insertion);
         if (node == NULL)
         {
@@ -601,7 +606,7 @@ insertion(char const** const ptr)
 
 
 static HGVS_Node*
-deletion(char const** const ptr)
+deletion_or_delins(char const** const ptr)
 {
     if (match_string(ptr, "del"))
     {
@@ -633,7 +638,7 @@ deletion(char const** const ptr)
     } // if
 
     return NULL;
-} // deletion
+} // deletion_or_delins
 
 
 static HGVS_Node*
@@ -753,18 +758,18 @@ variant(char const** const ptr)
         return parse_error(node, "invalid variant");
     } // if
 
-    node->right = substitution(ptr);
+    node->right = substitution_or_repeat(ptr);
     if (node->right != NULL)
     {
         if (node->right->type == HGVS_Node_substitution &&
-            (node->left->type != HGVS_Node_point ||
-             node->left->type != HGVS_Node_uncertain))
+            (node->left->left->type != HGVS_Node_point ||
+             node->left->left->type != HGVS_Node_uncertain))
         {
             return parse_error(node, "invalid substitution");
         } // if
 
         if (node->right->type == HGVS_Node_repeated &&
-            node->left->type != HGVS_Node_point)
+            node->left->left->type != HGVS_Node_point)
         {
             return parse_error(node, "invalid repeat");
         } // if
@@ -772,13 +777,13 @@ variant(char const** const ptr)
         return node;
     } // if
 
-    node->right = deletion(ptr);
+    node->right = deletion_or_delins(ptr);
     if (node->right != NULL)
     {
         return node;
     } // if
 
-    if (node->left->type == HGVS_Node_range)
+    if (node->left->left->type == HGVS_Node_range)
     {
         node->right = insertion(ptr);
         if (node->right != NULL)
@@ -793,7 +798,7 @@ variant(char const** const ptr)
         return node;
     } // if
 
-    if (node->left->type == HGVS_Node_range)
+    if (node->left->left->type == HGVS_Node_range)
     {
         node->right = inversion(ptr);
         if (node->right != NULL)
@@ -802,7 +807,7 @@ variant(char const** const ptr)
         } // if
     } // if
 
-    if (node->left->type == HGVS_Node_range)
+    if (node->left->left->type == HGVS_Node_range)
     {
         node->right = conversion(ptr);
         if (node->right != NULL)
@@ -811,8 +816,8 @@ variant(char const** const ptr)
         } // if
     } // if
 
-    if (node->left->type == HGVS_Node_point ||
-        node->left->type == HGVS_Node_range)
+    if (node->left->left->type == HGVS_Node_point ||
+        node->left->left->type == HGVS_Node_range)
     {
         node->right = equal(ptr);
         if (node->right != NULL)
@@ -821,7 +826,7 @@ variant(char const** const ptr)
         } // if
     } // if
 
-    if (node->left->type == HGVS_Node_range)
+    if (node->left->left->type == HGVS_Node_range)
     {
         node->right = repeated_length(ptr);
         if (node->right != NULL)
