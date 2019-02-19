@@ -11,7 +11,7 @@ CC       = gcc
 CFLAGS   = -march=native
 CPPFLAGS = $(addprefix -I, $(INC_DIR) $(LIB_INC)) -std=c99 -Wall -Wextra -pedantic
 
-.PHONY: all clean debug release
+.PHONY: all check clean debug release
 
 debug: CFLAGS += -O0 -DDEBUG -ggdb3
 debug: all
@@ -20,6 +20,9 @@ release: CFLAGS += -O3 -fomit-frame-pointer -funroll-loops -DNDEBUG
 release: all
 
 all: $(TARGET)
+
+check: $(TARGET)
+	tests/run_tests.sh < tests/valid.in
 
 clean:
 	rm -f $(OBJECTS) $(DEPS) $(TARGET)

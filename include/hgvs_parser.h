@@ -27,13 +27,16 @@ typedef struct HGVS_Node
         HGVS_Node_repeated_range,
         HGVS_Node_insertion,
         HGVS_Node_inserted,
+        HGVS_Node_inserted_range,
+        HGVS_Node_inserted_uncertain,
         HGVS_Node_deletion,
         HGVS_Node_duplication,
         HGVS_Node_inversion,
         HGVS_Node_conversion,
         HGVS_Node_equal,
         HGVS_Node_deletion_insertion,
-        HGVS_Node_variant
+        HGVS_Node_variant,
+        HGVS_Node_equal_all
     } HGVS_Node_Type;
 
     enum HGVS_Node_Type type;
