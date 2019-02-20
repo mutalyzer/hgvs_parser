@@ -32,6 +32,13 @@ typedef struct HGVS_Node
         HGVS_Node_deletion,
         HGVS_Node_deletion_insertion,
         HGVS_Node_substitution,
+        HGVS_Node_inserted,
+        HGVS_Node_inserted_compound,
+        HGVS_Node_insertion,
+        HGVS_Node_range_exact,
+        HGVS_Node_conversion,
+        HGVS_Node_repeat,
+        HGVS_Node_equal,
     } HGVS_Node_Type;
 
     struct HGVS_Node* left;
