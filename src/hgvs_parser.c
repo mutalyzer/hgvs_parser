@@ -368,10 +368,13 @@ offset(char const** const str)
         node->data = HGVS_Node_negative;
 
         HGVS_Node* const probe = number_or_unknown(&ptr);
-        if (is_error(probe) ||
-            is_unmatched(probe))
+        if (is_error(probe))
         {
             return error(node, probe, *str, "while matching an offset (-)");
+        }
+        if (is_unmatched(probe))
+        {
+            return error(node, NULL, ptr, "expected a number or unknown");
         } // if
 
         node->left = probe;
@@ -391,10 +394,13 @@ offset(char const** const str)
         node->data = HGVS_Node_positive;
 
         HGVS_Node* const probe = number_or_unknown(&ptr);
-        if (is_error(probe) ||
-            is_unmatched(probe))
+        if (is_error(probe))
         {
             return error(node, probe, *str, "while matching an offset (+)");
+        }
+        if (is_unmatched(probe))
+        {
+            return error(node, NULL, ptr, "expected a number or unknown");
         } // if
 
         node->left = probe;
@@ -431,7 +437,6 @@ point(char const** const str)
     {
         return error(node, probe, *str, "while matching a point");
     } // if
-
     if (is_unmatched(probe))
     {
         return unmatched(node);
@@ -465,10 +470,13 @@ uncertain(char const** const str)
         } // if
 
         HGVS_Node* probe = point(&ptr);
-        if (is_error(probe) ||
-            is_unmatched(probe))
+        if (is_error(probe))
         {
             return error(node, probe, *str, "while matching an uncertain");
+        } // if
+        if (is_unmatched(probe))
+        {
+            return error(node, NULL, ptr, "expected a point");
         } // if
 
         node->left = probe;
@@ -479,10 +487,13 @@ uncertain(char const** const str)
         } // if
 
         probe = point(&ptr);
-        if (is_error(probe) ||
-            is_unmatched(probe))
+        if (is_error(probe))
         {
             return error(node, probe, *str, "while matching an uncertain");
+        } // if
+        if (is_unmatched(probe))
+        {
+            return error(node, NULL, ptr, "expected a point");
         } // if
 
         node->right = probe;
@@ -580,10 +591,13 @@ location(char const** const str)
 {
     char const* ptr = *str;
     HGVS_Node* probe = point_or_uncertain(&ptr);
-    if (is_error(probe) ||
-        is_unmatched(probe))
+    if (is_error(probe))
     {
         return error(NULL, probe, *str, "while matching a location");
+    } // if
+    if (is_unmatched(probe))
+    {
+        return error(NULL, NULL, ptr, "expected a point or uncertain");
     } // if
 
     if (match_char(&ptr, '_'))
@@ -864,10 +878,13 @@ substitution_or_repeat(char const** const str)
         node->left = probe;
 
         probe = sequence(&ptr);
-        if (is_error(probe) ||
-            is_unmatched(probe))
+        if (is_error(probe))
         {
             return error(node, probe, *str, "while matching a substitution");
+        } // if
+        if (is_unmatched(probe))
+        {
+            return error(node, NULL, ptr, "expected a sequence");
         } // if
 
         node->right = probe;
@@ -902,25 +919,96 @@ substitution_or_repeat(char const** const str)
 
 
 static HGVS_Node*
+insert_length(char const** const str)
+{
+    char const* ptr = *str;
+    if (match_char(&ptr, '('))
+    {
+        HGVS_Node* probe = number_or_unknown(&ptr);
+        if (is_error(probe))
+        {
+            return error(NULL, probe, *str, "while matching an insert length");
+        } // if
+        if (is_unmatched(probe))
+        {
+            return error(NULL, NULL, ptr, "expected number or unknown");
+        } // if
+
+        if (match_char(&ptr, '_'))
+        {
+            HGVS_Node* const node = create(HGVS_Node_range_exact);
+            if (is_error_allocation(node))
+            {
+                return error_allocation(probe);
+            } // if
+
+            node->left = probe;
+
+            probe = number(&ptr);
+            if (is_error(probe))
+            {
+                return error(node, probe, *str, "while matching an insert length");
+            } // if
+            if (is_unmatched(probe))
+            {
+                return error(node, NULL, ptr, "expected a number");
+            } // if
+
+            node->right = probe;
+
+            if (!match_char(&ptr, ')'))
+            {
+                return error(node, NULL, ptr, "expected ')'");
+            } // if
+
+            *str = ptr;
+            return node;
+        } // if
+
+        if (!match_char(&ptr, ')'))
+        {
+            return error(probe, NULL, ptr, "expected ')'");
+        } // if
+
+        *str = ptr;
+        return probe;
+    } // if
+
+    return unmatched(NULL);
+} // insert_length
+
+
+static HGVS_Node*
 insert(char const** const str)
 {
     char const* ptr = *str;
-    HGVS_Node* probe = range(&ptr);
+    HGVS_Node* probe = insert_length(&ptr);
     if (is_error(probe))
     {
-        return error(NULL, probe, *str, "while matching an insert");
+        // try next: this is a dirty hack: combine range and insert length
+        HGVS_Node_destroy(probe);
+        probe = unmatched(NULL);
     } // if
 
     if (is_unmatched(probe))
     {
-        probe = sequence_or_reference(&ptr);
+        HGVS_Node* probe = range(&ptr);
         if (is_error(probe))
         {
             return error(NULL, probe, *str, "while matching an insert");
         } // if
+
         if (is_unmatched(probe))
         {
-            return error(NULL, NULL, ptr, "expected a range, reference or sequence");
+            probe = sequence_or_reference(&ptr);
+            if (is_error(probe))
+            {
+                return error(NULL, probe, *str, "while matching an insert");
+            } // if
+            if (is_unmatched(probe))
+            {
+                return error(NULL, NULL, ptr, "expected an insert length, range, reference or sequence");
+            } // if
         } // if
     } // if
 
@@ -931,6 +1019,11 @@ insert(char const** const str)
     } // if
 
     node->left = probe;
+
+    if (match_string(&ptr, "inv"))
+    {
+        node->data = HGVS_Node_inverted;
+    } // if
 
     probe = repeated(&ptr);
     if (is_error(probe))
@@ -958,10 +1051,13 @@ inserted(char const** const str)
         } // if
 
         HGVS_Node* probe = insert(&ptr);
-        if (is_error(probe) ||
-            is_unmatched(probe))
+        if (is_error(probe))
         {
             return error(node, probe, *str, "while matching an inserted compound");
+        } // if
+        if (is_unmatched(probe))
+        {
+            return error(node, NULL, ptr, "expected an inserted");
         } // if
 
         node->left = probe;
@@ -976,11 +1072,15 @@ inserted(char const** const str)
             } // if
 
             probe = insert(&ptr);
-            if (is_error(probe) ||
-                is_unmatched(probe))
+            if (is_error(probe))
             {
                 HGVS_Node_destroy(next);
                 return error(node, probe, *str, "while matching an inserted compound");
+            } // if
+            if (is_unmatched(probe))
+            {
+                HGVS_Node_destroy(next);
+                return error(node, NULL, ptr, "expected an inserted");
             } // if
 
             next->left = probe;
@@ -1292,6 +1392,110 @@ variant(char const** const str)
 } // variant
 
 
+static HGVS_Node*
+allele(char const** const str)
+{
+    char const* ptr = *str;
+    if (match_char(&ptr, '['))
+    {
+        if (match_char(&ptr, '='))
+        {
+            HGVS_Node* const node = create(HGVS_Node_equal_allele);
+            if (is_error_allocation(node))
+            {
+                return error_allocation(NULL);
+            } // if
+
+            if (!match_char(&ptr, ']'))
+            {
+                return error(node, NULL, ptr, "expected ']'");
+            } // if
+
+            *str = ptr;
+            return node;
+        } // if
+
+        HGVS_Node* const node = create(HGVS_Node_variant_list);
+        if (is_error_allocation(node))
+        {
+            return error_allocation(NULL);
+        } // if
+
+        HGVS_Node* probe = variant(&ptr);
+        if (is_error(probe))
+        {
+            return error(node, probe, *str, "while matching an allele");
+        } // if
+        if (is_unmatched(probe))
+        {
+            return error(node, NULL, ptr, "expected a variant");
+        } // if
+
+        node->left = probe;
+
+        HGVS_Node* tmp = node;
+        while (match_char(&ptr, ';'))
+        {
+            HGVS_Node* const next = create(HGVS_Node_variant_list);
+            if (is_error_allocation(node))
+            {
+                return error_allocation(node);
+            } // if
+
+            probe = variant(&ptr);
+            if (is_error(probe))
+            {
+                HGVS_Node_destroy(next);
+                return error(node, probe, *str, "while matching an allele");
+            } // if
+            if (is_unmatched(probe))
+            {
+                HGVS_Node_destroy(next);
+                return error(node, NULL, ptr, "expected a variant");
+            } // if
+
+            next->left = probe;
+
+            tmp->right = next;
+            tmp = tmp->right;
+        } // while
+
+        if (!match_char(&ptr, ']'))
+        {
+            return error(node, NULL, ptr, "expected ']'");
+        } // if
+
+        *str = ptr;
+        return node;
+    } // if
+
+    if (match_char(&ptr, '='))
+    {
+        HGVS_Node* const node = create(HGVS_Node_equal_allele);
+        if (is_error_allocation(node))
+        {
+            return error_allocation(NULL);
+        } // if
+
+        *str = ptr;
+        return node;
+    } // if
+
+    HGVS_Node* const node = variant(&ptr);
+    if (is_error(node))
+    {
+        return error(NULL, node, *str, "while matching an allele");
+    } // if
+    if (is_unmatched(node))
+    {
+        return error(NULL, NULL, ptr, "expected a variant, variant list or '='");
+    } // if
+
+    *str = ptr;
+    return node;
+} // allele
+
+
 void
 error_print_indent(char const* const str, char const* const ptr)
 {
@@ -1319,7 +1523,7 @@ HGVS_parse(char const* const str)
 {
     char const* ptr = str;
 
-    HGVS_Node* const node = variant(&ptr);
+    HGVS_Node* const node = allele(&ptr);
 
     if (is_unmatched(node))
     {

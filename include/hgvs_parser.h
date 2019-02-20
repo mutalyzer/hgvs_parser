@@ -9,6 +9,7 @@ static size_t const HGVS_Node_downstream = 1;
 static size_t const HGVS_Node_upstream   = 2;
 static size_t const HGVS_Node_negative   = 1;
 static size_t const HGVS_Node_positive   = 2;
+static size_t const HGVS_Node_inverted   = 1;
 
 
 typedef struct HGVS_Node
@@ -39,6 +40,8 @@ typedef struct HGVS_Node
         HGVS_Node_conversion,
         HGVS_Node_repeat,
         HGVS_Node_equal,
+        HGVS_Node_equal_allele,
+        HGVS_Node_variant_list,
     } HGVS_Node_Type;
 
     struct HGVS_Node* left;
