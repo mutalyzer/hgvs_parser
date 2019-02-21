@@ -48,8 +48,7 @@ typedef struct HGVS_Node
         HGVS_Node_equal,
         HGVS_Node_equal_allele,
         HGVS_Node_variant_list,
-        HGVS_Node_reference,
-        HGVS_Node_reference_identifier
+        HGVS_Node_reference
     } HGVS_Node_Type;
 
     struct HGVS_Node* left;

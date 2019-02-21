@@ -162,10 +162,7 @@ match_reference(char const** const str, size_t* len)
 {
     *len = 0;
     char const* ptr = *str;
-    while (isalnum(*ptr) || *ptr == '_' ||
-                            *ptr == '(' ||
-                            *ptr == ')' ||
-                            *ptr == '.')
+    while (isalnum(*ptr) || *ptr == '_' || *ptr == '.')
     {
         ptr += 1;
         *len += 1;
@@ -780,25 +777,41 @@ reference(char const** const str, size_t const prefix)
 
     if (prefix + len > 0)
     {
-        if (!match_char(&ptr, ':'))
-        {
-            return error(NULL, NULL, ptr, "expected: ':'");
-        } // if
-
         HGVS_Node* const node = create(HGVS_Node_reference);
         if (is_error_allocation(node))
         {
             return error_allocation(NULL);
         } // if
 
-        node->left = create(HGVS_Node_reference_identifier);
-        if (is_error_allocation(node->left))
+        node->ptr = *str - prefix;
+        node->data = prefix + len;
+
+        if (match_char(&ptr, '('))
         {
-            return error_allocation(node);
+            size_t len = 0;
+            if (match_reference(&ptr, &len))
+            {
+                node->left = create(HGVS_Node_reference);
+                if (is_error_allocation(node->left))
+                {
+                    return error_allocation(node);
+                } // if
+
+                node->left->ptr = ptr - len;
+                node->data = len;
+
+                if (!match_char(&ptr, ')'))
+                {
+                    return error(node, NULL, ptr, "expected: ')'");
+                } // if
+            } // if
         } // if
 
-        node->left->ptr = *str - prefix;
-        node->left->data = prefix + len;
+        if (!match_char(&ptr, ':'))
+        {
+            return error(node, NULL, ptr, "expected: ':'");
+        } // if
+
 
         if (match_char(&ptr, 'c'))
         {
