@@ -1,22 +1,43 @@
 #include "../include/hgvs_parser.h"
 
 
+/*
+TODO list
+- multi line indent
+- EBNF
+- implement reference
+*/
+
+
+#include <ctype.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 
-static size_t dbg_malloc_cnt = 0;
+static size_t const MAX_INTEGER = SIZE_MAX / 10 - 10;
 
 
-static inline bool
-is_digit(char const ch)
+static HGVS_Node allocation_error_context =
 {
-    return ch == '0' || ch == '1' || ch == '2' || ch == '3' ||
-           ch == '4' || ch == '5' || ch == '6' || ch == '7' ||
-           ch == '8' || ch == '9';
-} // is_digit
+    .left  = NULL,
+    .right = NULL,
+    .type  = HGVS_Node_error_context,
+    .data  = 0,
+    .ptr   = "allocation error: out of memory?"
+}; // allocation_error_context
+
+
+static HGVS_Node allocation_error =
+{
+    .left  = &allocation_error_context,
+    .right = NULL,
+    .type  = HGVS_Node_error_allocation,
+    .data  = 0,
+    .ptr   = NULL
+}; // allocation_error
 
 
 static inline bool
@@ -29,10 +50,18 @@ is_IUPAC_NT(char const ch)
 } // is_IUPAC_NT
 
 
+static inline bool
+is_decimal_digit(char const ch)
+{
+    return ch == '0' || ch == '1' || ch == '2' || ch == '3' ||
+           ch == '4' || ch == '5' || ch == '6' || ch == '7' ||
+           ch == '8' || ch == '9';
+} // is_decimal_digit
+
+
 static inline size_t
 to_integer(char const ch)
 {
-    if (ch == '0') return 0;
     if (ch == '1') return 1;
     if (ch == '2') return 2;
     if (ch == '3') return 3;
@@ -47,57 +76,67 @@ to_integer(char const ch)
 
 
 static inline bool
-match_char(char const** const ptr, char const ch)
+match_char(char const** const str, char const ch)
 {
-    if (**ptr == ch)
+    if (**str == ch)
     {
-        *ptr += 1;
+        *str += 1;
         return true;
     } // if
+
     return false;
 } // match_char
 
 
 static inline bool
-match_integer(char const** const ptr, size_t* num)
+match_integer(char const** const str, size_t* num)
 {
-    *num = 0;
     bool is_num = false;
-    char const* p = *ptr;
-    while (is_digit(*p))
+    *num = 0;
+    char const* ptr = *str;
+
+    while (is_decimal_digit(*ptr))
     {
         is_num = true;
         if (*num < SIZE_MAX / 10 - 10)
         {
             *num *= 10;
-            *num += to_integer(**ptr);
+            *num += to_integer(*ptr);
         } // if
-        p += 1;
+        ptr += 1;
     } // while
 
-    if (is_num && *num < SIZE_MAX / 10 - 10)
+    if (is_num)
     {
-        *ptr = p;
+        *str = ptr;
+
+        if (*num < MAX_INTEGER)
+        {
+            return true;
+        } // if
+
+        *num = -1;
         return true;
     } // if
+
     return false;
 } // match_integer
 
 
 static inline bool
-match_IUPAC_NT(char const** const ptr, size_t* len)
+match_IUPAC_NT(char const** const str, size_t* len)
 {
     *len = 0;
-    char const* p = *ptr;
-    while (is_IUPAC_NT(*p))
+    char const* ptr = *str;
+    while (is_IUPAC_NT(*ptr))
     {
-        p += 1;
+        ptr += 1;
         *len += 1;
     } // while
 
     if (*len > 0)
     {
-        *ptr = p;
+        *str = ptr;
         return true;
     } // if
     return false;
@@ -105,850 +144,1386 @@ match_IUPAC_NT(char const** const ptr, size_t* len)
 
 
 static inline bool
-match_string(char const** const ptr, char const* tok)
+match_string(char const** const str, char const* tok)
 {
-    char const* p = *ptr;
-    while (*tok != '\0' && *tok == *p)
+    char const* ptr = *str;
+    while (*tok != '\0' && *tok == *ptr)
     {
-        p += 1;
+        ptr += 1;
         tok  += 1;
     } // while
 
     if (*tok == '\0')
     {
-        *ptr = p;
+        *str = ptr;
         return true;
     } // if
     return false;
 } // match_string
 
 
-HGVS_Node*
+static inline bool
+is_error_allocation(HGVS_Node const* const node)
+{
+    return node != NULL && node->type == HGVS_Node_error_allocation;
+} // is_error_allocation
+
+
+static inline bool
+is_error(HGVS_Node const* const node)
+{
+    return node != NULL && (node->type == HGVS_Node_error_allocation ||
+                            node->type == HGVS_Node_error);
+} // is_error
+
+
+static inline bool
+is_unmatched(HGVS_Node const* const node)
+{
+    return node == NULL;
+} // is_unmatched
+
+
+void
 HGVS_Node_destroy(HGVS_Node* node)
 {
-    if (node != NULL)
+    if (node != NULL && node->type != HGVS_Node_error_allocation)
     {
         HGVS_Node_destroy(node->left);
         HGVS_Node_destroy(node->right);
-        dbg_malloc_cnt -= 1;
-        /*
-        fprintf(stderr, "dbg  free:   %p  (%8zu)\n", (void*) node,
-                                                     dbg_malloc_cnt);
-        */
         free(node);
     } // if
-    return NULL;
 } // HGVS_Node_destroy
 
 
-static inline HGVS_Node*
+static HGVS_Node*
+error_allocation(HGVS_Node* node)
+{
+    HGVS_Node_destroy(node);
+    return &allocation_error;
+} // error_allocation
+
+
+static HGVS_Node*
 create(enum HGVS_Node_Type const type)
 {
+
     HGVS_Node* const node = malloc(sizeof(*node));
     if (node == NULL)
     {
-        return NULL;
+        return error_allocation(NULL);
     } // if
-    dbg_malloc_cnt += 1;
-    /*
-    fprintf(stderr, "dbg  malloc: %p  (%8zu)\n", (void*) node,
-                                                 dbg_malloc_cnt);
-    */
-    node->type  = type;
+
     node->left  = NULL;
     node->right = NULL;
-    node->ptr   = NULL;
-    node->data.value = 0;
+
+    node->type = type;
+    node->data = 0;
+    node->ptr  = NULL;
+
     return node;
 } // create
 
 
-static inline HGVS_Node*
-allocation_error(HGVS_Node* node)
+static HGVS_Node*
+error(HGVS_Node* const  node,
+      HGVS_Node* const  next,
+      char const* const ptr,
+      char const* const msg)
 {
-    fprintf(stderr, "allocation error\n");
-    return HGVS_Node_destroy(node);
-} // allocation_error
+    HGVS_Node* const err = create(HGVS_Node_error);
+    if (is_error_allocation(err))
+    {
+        HGVS_Node_destroy(node);
+        return error_allocation(next);
+    } // if
 
+    err->right = next;
+    err->left = create(HGVS_Node_error_context);
+    if (is_error_allocation(err->left))
+    {
+        HGVS_Node_destroy(node);
+        return error_allocation(err);
+    } // if
 
-static inline HGVS_Node*
-parse_error(HGVS_Node* node, char const* const err)
-{
-    fprintf(stderr, "parse error:  %s\n", err);
-    return HGVS_Node_destroy(node);
-} // parse_error
+    err->left->left = node;
+    err->left->ptr = msg;
+
+    err->ptr = ptr;
+
+    return err;
+} // error
 
 
 static HGVS_Node*
-number(char const** const ptr)
+unmatched(HGVS_Node* node)
+{
+    HGVS_Node_destroy(node);
+    return NULL;
+} // unmatched
+
+
+static HGVS_Node*
+number(char const** const str)
 {
     size_t num = 0;
-    if (match_integer(ptr, &num))
+    char const* ptr = *str;
+    if (match_integer(&ptr, &num))
     {
         HGVS_Node* const node = create(HGVS_Node_number);
-        if (node == NULL)
+        if (is_error_allocation(node))
         {
-            return allocation_error(NULL);
+            return error_allocation(NULL);
         } // if
-        node->data.value = num;
+
+        node->data = num;
+
+        *str = ptr;
         return node;
     } // if
 
-    return NULL;
+    return unmatched(NULL);
 } // number
 
 
 static HGVS_Node*
-position(char const** const ptr)
+unknown(char const** const str)
 {
-    if (match_char(ptr, '?'))
+    char const* ptr = *str;
+    if (match_char(&ptr, '?'))
     {
-        HGVS_Node* const node = create(HGVS_Node_position_uncertain);
-        if (node == NULL)
+        HGVS_Node* const node = create(HGVS_Node_unknown);
+        if (is_error_allocation(node))
         {
-            return allocation_error(NULL);
+            return error_allocation(NULL);
         } // if
+
+        *str = ptr;
         return node;
     } // if
 
-    return number(ptr);
+    return unmatched(NULL);
+} // unknown
+
+
+static HGVS_Node*
+number_or_unknown(char const** const str)
+{
+    char const* ptr = *str;
+    HGVS_Node* node = unknown(&ptr);
+    if (is_error(node))
+    {
+        return error(NULL, node, *str, "while matching a number or unknown ('?')");
+    } // if
+    if (is_unmatched(node))
+    {
+        node = number(&ptr);
+        if (is_error(node))
+        {
+            return error(NULL, node, *str, "while matching a number or unknown ('?')");
+        } // if
+        if (is_unmatched(node))
+        {
+            return unmatched(NULL);
+        } // if
+
+        *str = ptr;
+        return node;
+    } // if
+
+    *str = ptr;
+    return node;
+} // number_or_unknown
+
+
+static HGVS_Node*
+position(char const** const str)
+{
+    char const* ptr = *str;
+    HGVS_Node* const probe = number_or_unknown(&ptr);
+    if (is_error(probe))
+    {
+        return error(NULL, probe, *str, "while matching a position");
+    } // if
+
+    if (is_unmatched(probe))
+    {
+        return unmatched(NULL);
+    } // if
+
+    HGVS_Node* const node = create(HGVS_Node_position);
+    if (is_error_allocation(node))
+    {
+        return error_allocation(NULL);
+    } // if
+
+    node->left = probe;
+
+    *str = ptr;
+    return node;
 } // position
 
 
 static HGVS_Node*
-offset(char const** const ptr)
+offset(char const** const str)
 {
-    if (match_char(ptr, '-'))
+    char const* ptr = *str;
+    if (match_char(&ptr, '-'))
     {
-        HGVS_Node* const node = create(HGVS_Node_offset_negative);
-        if (node == NULL)
+        HGVS_Node* const node = create(HGVS_Node_offset);
+        if (is_error_allocation(node))
         {
-            return allocation_error(NULL);
+            return error_allocation(NULL);
         } // if
 
-        node->left = position(ptr);
-        if (node->left == NULL)
+        node->data = HGVS_Node_negative;
+
+        HGVS_Node* const probe = number_or_unknown(&ptr);
+        if (is_error(probe))
         {
-            return parse_error(node, "invalid offset");
+            return error(node, probe, *str, "while matching an offset (-)");
+        }
+        if (is_unmatched(probe))
+        {
+            return error(node, NULL, ptr, "expected an offset: number ...");
         } // if
+
+        node->left = probe;
+
+        *str = ptr;
         return node;
     } // if
 
-    if (match_char(ptr, '+'))
+    if (match_char(&ptr, '+'))
     {
-        HGVS_Node* const node = create(HGVS_Node_offset_positive);
-        if (node == NULL)
+        HGVS_Node* const node = create(HGVS_Node_offset);
+        if (is_error(node))
         {
-            return allocation_error(NULL);
+            return error_allocation(NULL);
         } // if
 
-        node->left = position(ptr);
-        if (node->left == NULL)
+        node->data = HGVS_Node_positive;
+
+        HGVS_Node* const probe = number_or_unknown(&ptr);
+        if (is_error(probe))
         {
-            return parse_error(node, "invalid offset");
+            return error(node, probe, *str, "while matching an offset (+)");
+        }
+        if (is_unmatched(probe))
+        {
+            return error(node, NULL, ptr, "expected an offset: number ...");
         } // if
+
+        node->left = probe;
+
+        *str = ptr;
         return node;
     } // if
 
-    return NULL;
+    return unmatched(NULL);
 } // offset
 
 
 static HGVS_Node*
-point(char const** const ptr)
+point(char const** const str)
 {
     HGVS_Node* const node = create(HGVS_Node_point);
-    if (node == NULL)
+    if (is_error_allocation(node))
     {
-        return allocation_error(NULL);
+        return error_allocation(NULL);
     } // if
 
-    if (match_char(ptr, '-'))
+    char const* ptr = *str;
+    if (match_char(&ptr, '-'))
     {
-        node->type = HGVS_Node_point_upstream;
+        node->data = HGVS_Node_downstream;
     } // if
-    else if (match_char(ptr, '*'))
+    else if (match_char(&ptr, '*'))
     {
-        node->type = HGVS_Node_point_downstream;
-    }
-
-    node->left = position(ptr);
-    if (node->left == NULL)
-    {
-        return parse_error(node, "invalid point");
+        node->data = HGVS_Node_upstream;
     } // if
 
-    node->right = offset(ptr);
+    HGVS_Node* probe = position(&ptr);
+    if (is_error(probe))
+    {
+        return error(node, probe, *str, "while matching a point");
+    } // if
+    if (is_unmatched(probe))
+    {
+        if (node->data != 0)
+        {
+            return error(node, NULL, ptr, "expected number or unknown ('?')");
+        } // if
+        return unmatched(node);
+    } // if
 
+    node->left = probe;
+
+    probe = offset(&ptr);
+    if (is_error(probe))
+    {
+        return error(node, probe, *str, "while matching a point");
+    } // if
+
+    node->right = probe;
+
+    *str = ptr;
     return node;
 } // point
 
 
 static HGVS_Node*
-uncertain(char const** const ptr)
+uncertain(char const** const str)
 {
-    if (match_char(ptr, '('))
+    char const* ptr = *str;
+    if (match_char(&ptr, '('))
     {
         HGVS_Node* const node = create(HGVS_Node_uncertain);
-        if (node == NULL)
+        if (is_error_allocation(node))
         {
-            return allocation_error(NULL);
+            return error_allocation(NULL);
         } // if
 
-        node->left = point(ptr);
-        if (node->left == NULL)
+        HGVS_Node* probe = point(&ptr);
+        if (is_error(probe))
         {
-            return parse_error(node, "invalid uncertain");
+            return error(node, probe, *str, "while matching an uncertain");
+        } // if
+        if (is_unmatched(probe))
+        {
+            return error(node, NULL, ptr, "expected a point: ('-' | '*') number ...");
         } // if
 
-        if (!match_char(ptr, '_'))
+        node->left = probe;
+
+        if (!match_char(&ptr, '_'))
         {
-            return parse_error(node, "invalid uncertain");
+            return error(node, NULL, ptr, "expected: '_'");
         } // if
 
-        node->right = point(ptr);
-        if (node->right == NULL)
+        probe = point(&ptr);
+        if (is_error(probe))
         {
-            return parse_error(node, "invalid uncertain");
+            return error(node, probe, *str, "while matching an uncertain");
+        } // if
+        if (is_unmatched(probe))
+        {
+            return error(node, NULL, ptr, "expected a point: ('-' | '*') number ...");
         } // if
 
-        if (!match_char(ptr, ')'))
+        node->right = probe;
+
+        if (!match_char(&ptr, ')'))
         {
-            return parse_error(node, "invalid uncertain");
+            return error(node, NULL, ptr, "expected: ')'");
         } // if
 
+        *str = ptr;
         return node;
     } // if
 
-    return NULL;
+    return unmatched(NULL);
 } // uncertain
 
 
 static HGVS_Node*
-point_or_uncertain(char const** const ptr)
+point_or_uncertain(char const** const str)
 {
-    HGVS_Node* const node = uncertain(ptr);
-    if (node == NULL)
+    char const* ptr = *str;
+    HGVS_Node* node = uncertain(&ptr);
+    if (is_error(node))
     {
-        return point(ptr);
+        return error(NULL, node, *str, "while matching an uncertain");
+    } // if
+    if (is_unmatched(node))
+    {
+        node = point(&ptr);
+        if (is_error(node))
+        {
+            return error(NULL, node, *str, "while matching a point or uncertain");
+        } // if
+        if (is_unmatched(node))
+        {
+            return unmatched(NULL);
+        } // if
+
+        *str = ptr;
+        return node;
     } // if
 
+    *str = ptr;
     return node;
 } // point_or_uncertain
 
 
 static HGVS_Node*
-range(char const** const ptr)
+range(char const** const str)
 {
+    char const* ptr = *str;
+    HGVS_Node* probe = point_or_uncertain(&ptr);
+    if (is_error(probe))
+    {
+        return error(NULL, probe, *str, "while matching a range");
+    } // if
+
+    if (is_unmatched(probe))
+    {
+        return unmatched(NULL);
+    } // if
+
+    if (!match_char(&ptr, '_'))
+    {
+        return error(probe, NULL, ptr, "expected: '_'");
+    } // if
+
     HGVS_Node* const node = create(HGVS_Node_range);
-    if (node == NULL)
+    if (is_error_allocation(node))
     {
-        return allocation_error(NULL);
+        return error_allocation(probe);
     } // if
 
-    node->left = point_or_uncertain(ptr);
-    if (node->left == NULL)
+    node->left = probe;
+
+    probe = point_or_uncertain(&ptr);
+    if (is_error(probe))
     {
-        return parse_error(node, "invalid range");
+       return error(node, probe, *str, "while matching a range");
+    }
+    if (is_unmatched(probe))
+    {
+        return error(node, NULL, ptr, "expected point or uncertain: ('-' | '*') number ... or '(' point ...");
     } // if
 
-    if (!match_char(ptr, '_'))
-    {
-        return parse_error(node, "invalid range");
-    } // if
+    node->right = probe;
 
-    node->right = point_or_uncertain(ptr);
-    if (node->left == NULL)
-    {
-        return parse_error(node, "invalid range");
-    } // if
-
+    *str = ptr;
     return node;
 } // range
 
 
 static HGVS_Node*
-location(char const** const ptr)
+location(char const** const str)
 {
-    HGVS_Node* const node = create(HGVS_Node_location);
-    if (node == NULL)
+    char const* ptr = *str;
+    HGVS_Node* probe = point_or_uncertain(&ptr);
+    if (is_error(probe))
     {
-        return allocation_error(NULL);
+        return error(NULL, probe, *str, "while matching a location");
+    } // if
+    if (is_unmatched(probe))
+    {
+        return error(NULL, NULL, ptr, "expected a point or uncertain: ('-' | '*') number ... or '(' point ...");
     } // if
 
-    node->left = point_or_uncertain(ptr);
-    if (node->left == NULL)
+    if (match_char(&ptr, '_'))
     {
-        return parse_error(node, "invalid location");
-    } // if
-
-    if (match_char(ptr, '_'))
-    {
-        HGVS_Node* const tmp = create(HGVS_Node_range);
-        if (tmp == NULL)
+        HGVS_Node* const node = create(HGVS_Node_range);
+        if (is_error_allocation(node))
         {
-            return allocation_error(node);
+            return error_allocation(probe);
         } // if
 
-        tmp->left = node->left;
-        node->left = tmp;
+        node->left = probe;
 
-        tmp->right = point_or_uncertain(ptr);
-        if (tmp->right == NULL)
+        probe = point_or_uncertain(&ptr);
+        if (is_error(probe))
         {
-            return parse_error(node, "invalid range");
+            return error(node, probe, *str, "while matching a range");
         } // if
+        if (is_unmatched(probe))
+        {
+            return error(node, NULL, ptr, "expected a point or uncertain: ('-' | '*') number ... or '(' point ...");
+        } // if
+
+        node->right = probe;
+
+        *str = ptr;
         return node;
     } // if
 
-    return node;
+    *str = ptr;
+    return probe;
 } // location
 
 
 static HGVS_Node*
-inserted_length(char const** const ptr)
+sequence(char const** const str)
 {
-    if (match_char(ptr, '('))
-    {
-        if (match_char(ptr, '?'))
-        {
-            HGVS_Node* const node = create(HGVS_Node_inserted_uncertain);
-            if (node == NULL)
-            {
-                return allocation_error(NULL);
-            } // if
-
-            if (!match_char(ptr, ')'))
-            {
-                return parse_error(node, "invalid inserted length");
-            } // if
-
-            return node;
-        } // if
-
-        HGVS_Node* const probe = number(ptr);
-        if (probe == NULL)
-        {
-            return parse_error(probe, "invalid inserted length");
-        } // if
-
-        if (match_char(ptr, '_'))
-        {
-            HGVS_Node* const node = create(HGVS_Node_inserted_range);
-            if (node == NULL)
-            {
-                return allocation_error(probe);
-            } // if
-
-            node->left = probe;
-
-            node->right = number(ptr);
-            if (node->right == NULL)
-            {
-                return parse_error(node, "invalid inserted range");
-            } // if
-
-            if (!match_char(ptr, ')'))
-            {
-                return parse_error(node, "invalid inserted range");
-            } // if
-
-            return node;
-        } // if
-
-        if (!match_char(ptr, ')'))
-        {
-            return parse_error(probe, "invalid inserted length");
-        } // if
-
-        return probe;
-    } // if
-
-    return NULL;
-} // inserted_length
-
-
-static HGVS_Node*
-inserted(char const** const ptr)
-{
-    HGVS_Node* const node = create(HGVS_Node_inserted);
-    if (node == NULL)
-    {
-        return allocation_error(NULL);
-    } // if
-
-    node->left = inserted_length(ptr);
-
-    if (node->left == NULL)
-    {
-        node->ptr = *ptr;
-        size_t len = 0;
-        if (match_IUPAC_NT(ptr, &len))
-        {
-            node->data.value = len;
-            return node;
-        } // if
-        node->left = range(ptr);
-        if (node->left == NULL)
-        {
-            return parse_error(node, "invalid inserted");
-        } // if
-    } // if
-
-    if (match_string(ptr, "inv"))
-    {
-        node->data.value = INVERTED;
-    } // if
-
-    return node;
-} // inserted
-
-
-static HGVS_Node*
-repeated_length(char const** const ptr)
-{
-    if (match_char(ptr, '['))
-    {
-        HGVS_Node* const node = create(HGVS_Node_repeated);
-        if (node == NULL)
-        {
-            return allocation_error(NULL);
-        } // if
-
-        node->left = number(ptr);
-        if (node->left == NULL)
-        {
-            return parse_error(node, "invalid repeat");
-        } // if
-
-        if (!match_char(ptr, ']'))
-        {
-            return parse_error(node, "invalid repeat");
-        } // if
-
-        return node;
-    } // if
-
-    return NULL;
-} // repeated_length
-
-
-static HGVS_Node*
-repeated(char const** const ptr)
-{
-    if (match_char(ptr, '('))
-    {
-        HGVS_Node* const node = create(HGVS_Node_repeated_range);
-        if (node == NULL)
-        {
-            return allocation_error(NULL);
-        } // if
-
-        node->left = number(ptr);
-        if (node->left == NULL)
-        {
-            return parse_error(node, "invalid repeated range");
-        } // if
-
-        if (!match_char(ptr, '_'))
-        {
-            return parse_error(node, "invalid repeated range");
-        } // if
-
-        node->right = number(ptr);
-        if (node->right == NULL)
-        {
-            return parse_error(node, "invalid repeated range");
-        } // if
-
-        return node;
-    } // if
-
-    return repeated_length(ptr);
-} // repeated
-
-
-static HGVS_Node*
-substitution_or_repeat(char const** const ptr)
-{
-    char const deleted = **ptr;
+    char const* ptr = *str;
     size_t len = 0;
-    if (match_IUPAC_NT(ptr, &len))
+    if (match_IUPAC_NT(&ptr, &len))
     {
-        if (match_char(ptr, '>'))
+        HGVS_Node* const node = create(HGVS_Node_sequence);
+        if (is_error_allocation(node))
         {
-            if (len != 1)
-            {
-                return parse_error(NULL, "invalid substitution");
-            } // if
-
-            HGVS_Node* const node = create(HGVS_Node_substitution);
-            if (node == NULL)
-            {
-                return allocation_error(NULL);
-            } // if
-
-            node->data.substitution.deleted = deleted;
-            node->data.substitution.inserted = **ptr;
-
-            len = 0;
-            if (!match_IUPAC_NT(ptr, &len))
-            {
-                return parse_error(node, "invalid substitution");
-            } // if
-
-            if (len != 1)
-            {
-                return parse_error(node, "invalid substitution");
-            } // if
-
-            return node;
+            return error_allocation(NULL);
         } // if
 
-        return repeated(ptr);
-    } // if
+        node->data = len;
+        node->ptr  = *str;
 
-    return NULL;
-} // substitution_or_repeat
-
-
-static HGVS_Node*
-inserted_compound(char const** const ptr)
-{
-    if (match_char(ptr, '['))
-    {
-        HGVS_Node* const node = inserted(ptr);
-        if (node == NULL)
-        {
-            return parse_error(NULL, "invalid inserted compound");
-        } // if
-
-        HGVS_Node* tmp = node;
-        while (match_char(ptr, ';'))
-        {
-            tmp->right = inserted(ptr);
-            if (tmp->right == NULL)
-            {
-                return parse_error(node, "invalid inserted compound");
-            } // if
-            tmp = tmp->right;
-        } // while
-
-        if (!match_char(ptr, ']'))
-        {
-            return parse_error(node, "invalid inserted compound");
-        } // if
-
+        *str = ptr;
         return node;
     } // if
 
-    return NULL;
-} // inserted_compound
+    return unmatched(NULL);
+} // sequence
 
 
 static HGVS_Node*
-insertion(char const** const ptr)
+sequence_or_number(char const** const str)
 {
-    if (match_string(ptr, "ins"))
+    char const* ptr = *str;
+    if (is_decimal_digit(*ptr))
     {
-        HGVS_Node* const node = create(HGVS_Node_insertion);
-        if (node == NULL)
+        HGVS_Node* const node = number(&ptr);
+        if (is_error(node))
         {
-            return allocation_error(NULL);
+            return error(NULL, node, *str, "while matching a sequence or number");
         } // if
 
-        node->left = inserted_compound(ptr);
-        if (node->left == NULL)
-        {
-            node->left = inserted(ptr);
-            if (node->left == NULL)
-            {
-                return parse_error(node, "invalid insertion");
-            } // if
-
-            return node;
-        } // if
-
+        *str = ptr;
         return node;
     } // if
 
-    return NULL;
-} // insertion
-
-
-static HGVS_Node*
-deletion_or_delins(char const** const ptr)
-{
-    if (match_string(ptr, "del"))
+    HGVS_Node* const node = sequence(&ptr);
+    if (is_error(node))
     {
-        HGVS_Node* const node = create(HGVS_Node_deletion);
-        if (node == NULL)
-        {
-            return allocation_error(NULL);
-        } // if
-
-        node->ptr = *ptr;
-        size_t len;
-        if (match_integer(ptr, &len))
-        {
-            node->ptr = NULL;
-            node->data.value = len;
-        } // if
-        else if (match_IUPAC_NT(ptr, &len))
-        {
-            node->data.value = len;
-        } // if
-
-        node->left = insertion(ptr);
-        if (node->left != NULL)
-        {
-            node->type = HGVS_Node_deletion_insertion;
-        } // if
-
-        return node;
+        return error(NULL, node, *str, "while matching a sequence or number");
     } // if
 
-    return NULL;
-} // deletion_or_delins
+    *str = ptr;
+    return node;
+} // sequence_or_number
 
 
 static HGVS_Node*
-duplication(char const** const ptr)
+reference(char const** const str)
 {
-    if (match_string(ptr, "dup"))
+    fprintf(stderr, "*** NOT IMPLEMENTED (reference) ***\n  %s\n", *str);
+
+    return unmatched(NULL);
+} // reference
+
+
+static HGVS_Node*
+sequence_or_reference(char const** const str)
+{
+    char const* ptr = *str;
+    if (isalpha(*ptr) == 0)
+    {
+        return unmatched(NULL);
+    } // if
+
+    size_t len = 0;
+    match_IUPAC_NT(&ptr, &len);
+
+    if (isalnum(*ptr) != 0 || *ptr == '_')
+    {
+        return reference(&ptr);
+    } // if
+
+    HGVS_Node* const node = create(HGVS_Node_sequence);
+    if (is_error_allocation(node))
+    {
+        return error_allocation(NULL);
+    } // if
+
+    node->data = len;
+    node->ptr  = *str;
+
+    *str = ptr;
+    return node;
+} // sequence_or_reference
+
+
+static HGVS_Node*
+duplication(char const** const str)
+{
+    char const* ptr = *str;
+    if (match_string(&ptr, "dup"))
     {
         HGVS_Node* const node = create(HGVS_Node_duplication);
-        if (node == NULL)
+        if (is_error_allocation(node))
         {
-            return allocation_error(NULL);
+            return error_allocation(NULL);
         } // if
 
-        node->ptr = *ptr;
-        size_t len;
-        if (match_integer(ptr, &len))
+        HGVS_Node* const probe = sequence_or_number(&ptr);
+        if (is_error(probe))
         {
-            node->ptr = NULL;
-            node->data.value = len;
-        } // if
-        else if (match_IUPAC_NT(ptr, &len))
-        {
-            node->data.value = len;
+            return error(node, probe, *str, "while matching a duplication");
         } // if
 
+        node->left = probe;
+
+        *str = ptr;
         return node;
     } // if
 
-    return NULL;
+    return unmatched(NULL);
 } // duplication
 
 
 static HGVS_Node*
-inversion(char const** const ptr)
+inversion(char const** const str)
 {
-    if (match_string(ptr, "inv"))
+    char const* ptr = *str;
+    if (match_string(&ptr, "inv"))
     {
         HGVS_Node* const node = create(HGVS_Node_inversion);
-        if (node == NULL)
+        if (is_error_allocation(node))
         {
-            return allocation_error(NULL);
+            return error_allocation(NULL);
         } // if
 
-        node->ptr = *ptr;
-        size_t len;
-        if (match_integer(ptr, &len))
+        HGVS_Node* const probe = sequence_or_number(&ptr);
+        if (is_error(probe))
         {
-            node->ptr = NULL;
-            node->data.value = len;
-        } // if
-        else if (match_IUPAC_NT(ptr, &len))
-        {
-            node->data.value = len;
+            return error(node, probe, *str, "while matching an inversion");
         } // if
 
+        node->left = probe;
+
+        *str = ptr;
         return node;
     } // if
 
-    return NULL;
+    return unmatched(NULL);
 } // inversion
 
 
 static HGVS_Node*
-conversion(char const** const ptr)
+repeated(char const** const str)
 {
-    if (match_string(ptr, "con"))
+    char const* ptr = *str;
+    if (match_char(&ptr, '['))
     {
-        HGVS_Node* const node = create(HGVS_Node_conversion);
-        if (node == NULL)
+        HGVS_Node* const node = number(&ptr);
+        if (is_error(node))
         {
-            return allocation_error(NULL);
+            return error(NULL, node, *str, "while matching a repeated (exact)");
+        } // if
+        if (is_unmatched(node))
+        {
+            return error(NULL, NULL, ptr, "expected: number ']' ...");
         } // if
 
-        node->left = range(ptr);
-        if (node->left == NULL)
+        if (!match_char(&ptr, ']'))
         {
-            return parse_error(node, "invalid conversion");
+            return error(node, NULL, ptr, "expected: ']'");
         } // if
 
+        *str = ptr;
         return node;
     } // if
 
-    return NULL;
+    if (match_char(&ptr, '('))
+    {
+        HGVS_Node* probe = number(&ptr);
+        if (is_error(probe))
+        {
+            return error(NULL, probe, *str, "while matching a repeated (uncertain)");
+        } // if
+        if (is_unmatched(probe))
+        {
+            return error(NULL, NULL, ptr, "expected: number '_' number ')' ...");
+        } // if
+
+        if (!match_char(&ptr, '_'))
+        {
+            return error(probe, NULL, ptr, "expected: '_'");
+        } // if
+
+        HGVS_Node* const node = create(HGVS_Node_range_exact);
+        if (is_error_allocation(node))
+        {
+            return error_allocation(probe);
+        } // if
+
+        node->left = probe;
+
+        probe = number(&ptr);
+        if (is_error(probe))
+        {
+            return error(NULL, probe, *str, "while matching a repeated (uncertain)");
+        } // if
+        if (is_unmatched(probe))
+        {
+            return error(NULL, NULL, ptr, "expected: number ')' ...");
+        } // if
+
+        node->right = probe;
+
+        if (!match_char(&ptr, ')'))
+        {
+            return error(node, NULL, ptr, "expected: ')'");
+        } // if
+
+        *str = ptr;
+        return node;
+    } // if
+
+    return unmatched(NULL);
+} // repeated
+
+
+static HGVS_Node*
+substitution_or_repeat(char const** const str)
+{
+    char const* ptr = *str;
+    HGVS_Node* probe = sequence(&ptr);
+    if (is_error(probe))
+    {
+        return error(NULL, probe, *str, "while matching a substitution or repeat");
+    } // if
+    if (is_unmatched(probe))
+    {
+        return unmatched(NULL);
+    } // if
+
+    if (match_char(&ptr, '>'))
+    {
+        HGVS_Node* const node = create(HGVS_Node_substitution);
+        if (is_error_allocation(node))
+        {
+            return error_allocation(probe);
+        } // if
+
+        node->left = probe;
+
+        probe = sequence(&ptr);
+        if (is_error(probe))
+        {
+            return error(node, probe, *str, "while matching a substitution");
+        } // if
+        if (is_unmatched(probe))
+        {
+            return error(node, NULL, ptr, "expected a sequence: 'A' | 'C' | 'G' | 'T' ...");
+        } // if
+
+        node->right = probe;
+
+        *str = ptr;
+        return node;
+    } // if
+
+    HGVS_Node* const node = create(HGVS_Node_repeat);
+    if (is_error_allocation(node))
+    {
+        return error_allocation(probe);
+    } // if
+
+    node->left = probe;
+
+    probe = repeated(&ptr);
+    if (is_error(probe))
+    {
+        return error(node, probe, *str, "while matching a repeat");
+    } // if
+    if (is_unmatched(probe))
+    {
+        return error(node, NULL, ptr, "expected a repeat or substitution: '[' ... or '>' ...");
+    } // if
+
+    node->right = probe;
+
+    *str = ptr;
+    return node;
+} // substitution_or_repeat
+
+
+static HGVS_Node*
+insert_length(char const** const str)
+{
+    char const* ptr = *str;
+    if (match_char(&ptr, '('))
+    {
+        HGVS_Node* probe = number_or_unknown(&ptr);
+        if (is_error(probe))
+        {
+            return error(NULL, probe, *str, "while matching an insert length");
+        } // if
+        if (is_unmatched(probe))
+        {
+            return unmatched(NULL);
+        } // if
+
+        if (match_char(&ptr, '_'))
+        {
+            HGVS_Node* const node = create(HGVS_Node_range_exact);
+            if (is_error_allocation(node))
+            {
+                return error_allocation(probe);
+            } // if
+
+            node->left = probe;
+
+            probe = number(&ptr);
+            if (is_error(probe))
+            {
+                return error(node, probe, *str, "while matching an insert length");
+            } // if
+            if (is_unmatched(probe))
+            {
+                return unmatched(node);
+            } // if
+
+            node->right = probe;
+
+            if (!match_char(&ptr, ')'))
+            {
+                return unmatched(node);
+            } // if
+
+            *str = ptr;
+            return node;
+        } // if
+
+        if (!match_char(&ptr, ')'))
+        {
+            return unmatched(probe);
+        } // if
+
+        *str = ptr;
+        return probe;
+    } // if
+
+    return unmatched(NULL);
+} // insert_length
+
+
+static HGVS_Node*
+insert(char const** const str)
+{
+    char const* ptr = *str;
+    HGVS_Node* probe = insert_length(&ptr);
+    if (is_error(probe))
+    {
+        return error(NULL, probe, *str, "while matching an insert");
+    } // if
+
+    if (is_unmatched(probe))
+    {
+        HGVS_Node* probe = range(&ptr);
+        if (is_error(probe))
+        {
+            return error(NULL, probe, *str, "while matching an insert");
+        } // if
+
+        if (is_unmatched(probe))
+        {
+            probe = sequence_or_reference(&ptr);
+            if (is_error(probe))
+            {
+                return error(NULL, probe, *str, "while matching an insert");
+            } // if
+            if (is_unmatched(probe))
+            {
+                return error(NULL, NULL, ptr, "expected an inserted part");
+            } // if
+        } // if
+    } // if
+
+    HGVS_Node* const node = create(HGVS_Node_inserted);
+    if (is_error_allocation(node))
+    {
+        return error_allocation(probe);
+    } // if
+
+    node->left = probe;
+
+    if (match_string(&ptr, "inv"))
+    {
+        node->data = HGVS_Node_inverted;
+    } // if
+
+    probe = repeated(&ptr);
+    if (is_error(probe))
+    {
+        return error(node, probe, *str, "while matching an insert");
+    } // if
+
+    node->right = probe;
+
+    *str = ptr;
+    return node;
+} // insert
+
+
+static HGVS_Node*
+inserted(char const** const str)
+{
+    char const* ptr = *str;
+    if (match_char(&ptr, '['))
+    {
+        HGVS_Node* const node = create(HGVS_Node_inserted_compound);
+        if (is_error_allocation(node))
+        {
+            return error_allocation(NULL);
+        } // if
+
+        HGVS_Node* probe = insert(&ptr);
+        if (is_error(probe))
+        {
+            return error(node, probe, *str, "while matching an inserted compound");
+        } // if
+
+        node->left = probe;
+
+        HGVS_Node* tmp = node;
+        while (match_char(&ptr, ';'))
+        {
+            HGVS_Node* const next = create(HGVS_Node_inserted_compound);
+            if (is_error_allocation(node))
+            {
+                return error_allocation(node);
+            } // if
+
+            probe = insert(&ptr);
+            if (is_error(probe))
+            {
+                HGVS_Node_destroy(next);
+                return error(node, probe, *str, "while matching an inserted compound");
+            } // if
+
+            next->left = probe;
+
+            tmp->right = next;
+            tmp = tmp->right;
+        } // while
+
+        if (!match_char(&ptr, ']'))
+        {
+            return error(node, NULL, ptr, "expected: ']'");
+        } // if
+
+        *str = ptr;
+        return node;
+    } // if
+
+    return insert(str);
+} // inserted
+
+
+static HGVS_Node*
+deletion_or_deletion_insertion(char const** const str)
+{
+    char const* ptr = *str;
+    if (match_string(&ptr, "del"))
+    {
+        HGVS_Node* probe = sequence_or_number(&ptr);
+        if (is_error(probe))
+        {
+            return error(NULL, probe, *str, "while matching a deletion or deletion/insertion");
+        } // if
+
+        HGVS_Node* const node = create(HGVS_Node_deletion);
+        if (is_error_allocation(node))
+        {
+            return error_allocation(NULL);
+        } // if
+
+        node->left = probe;
+
+        if (match_string(&ptr, "ins"))
+        {
+            node->type = HGVS_Node_deletion_insertion;
+
+            probe = inserted(&ptr);
+            if (is_error(probe))
+            {
+                return error(node, probe, *str, "while matching a deletion/insertion");
+            } // if
+
+            node->right = probe;
+        } // if
+
+        *str = ptr;
+        return node;
+    } // if
+
+    return unmatched(NULL);
+} // deletion_or_deletion_insertion
+
+
+static HGVS_Node*
+insertion(char const** const str)
+{
+    char const* ptr = *str;
+    if (match_string(&ptr, "ins"))
+    {
+        HGVS_Node* const node = create(HGVS_Node_insertion);
+        if (is_error_allocation(node))
+        {
+            return error_allocation(NULL);
+        } // if
+
+        HGVS_Node* const probe = inserted(&ptr);
+        if (is_error(probe))
+        {
+            return error(node, probe, *str, "while matching a insertion");
+        } // if
+
+        node->left = probe;
+
+        *str = ptr;
+        return node;
+    } // if
+
+    return unmatched(NULL);
+} // insertion
+
+
+static HGVS_Node*
+range_or_reference(char const** const str)
+{
+    char const* ptr = *str;
+    HGVS_Node* node = range(&ptr);
+    if (is_error(node))
+    {
+        return error(NULL, node, *str, "while matching a range or reference");
+    } // if
+    if (is_unmatched(node))
+    {
+        node = reference(&ptr);
+        if (is_error(node))
+        {
+            return error(NULL, node, *str, "while matching a range or reference");
+        } // if
+    } // if
+
+    *str = ptr;
+    return node;
+} // range_or_reference
+
+
+static HGVS_Node*
+conversion(char const** const str)
+{
+    char const* ptr = *str;
+    if (match_string(&ptr, "con"))
+    {
+        HGVS_Node* const node = create(HGVS_Node_conversion);
+        if (is_error_allocation(node))
+        {
+            return error_allocation(NULL);
+        } // if
+
+        HGVS_Node* const probe = range_or_reference(&ptr);
+        if (is_error(probe))
+        {
+            return error(node, probe, *str, "while matching a conversion");
+        } // if
+
+        node->left = probe;
+
+        *str = ptr;
+        return node;
+    } // if
+
+    return unmatched(NULL);
 } // conversion
 
 
 static HGVS_Node*
-equal(char const** const ptr)
+repeat(char const** const str)
 {
-    if (match_char(ptr, '='))
+    char const* ptr = *str;
+    HGVS_Node* const probe = repeated(&ptr);
+    if (is_error(probe))
+    {
+        return error(NULL, probe, *str, "while matching a repeat");
+    } // if
+    if (is_unmatched(probe))
+    {
+        return unmatched(NULL);
+    } // if
+
+    HGVS_Node* const node = create(HGVS_Node_repeat);
+    if (is_error_allocation(node))
+    {
+        return error_allocation(NULL);
+    } // if
+
+    node->right = probe;
+
+    *str = ptr;
+    return node;
+} // repeat
+
+
+static HGVS_Node*
+equal(char const** const str)
+{
+    char const* ptr = *str;
+    if (match_char(&ptr, '='))
     {
         HGVS_Node* const node = create(HGVS_Node_equal);
-        if (node == NULL)
+        if (is_error_allocation(node))
         {
-            return allocation_error(NULL);
+            return error_allocation(NULL);
         } // if
 
+        *str = ptr;
         return node;
     } // if
 
-    return NULL;
+    return unmatched(NULL);
 } // equal
 
 
 static HGVS_Node*
-variant(char const** const ptr)
+variant(char const** const str)
 {
+    char const* ptr = *str;
+    HGVS_Node* probe = location(&ptr);
+    if (is_error(probe))
+    {
+        return error(NULL, probe, *str, "while matching a variant");
+    } // if
+    if (is_unmatched(probe))
+    {
+        return error(NULL, NULL, ptr, "expected a location");
+    } // if
+
     HGVS_Node* const node = create(HGVS_Node_variant);
-    if (node == NULL)
+    if (is_error_allocation(node))
     {
-        return allocation_error(NULL);
+        return error_allocation(NULL);
     } // if
 
-    node->left = location(ptr);
-    if (node->left == NULL)
+    node->left = probe;
+
+    probe = substitution_or_repeat(&ptr);
+    if (is_error(probe))
     {
-        return parse_error(node, "invalid variant");
+        return error(node, probe, *str, "while matching a variant");
     } // if
-
-    node->right = substitution_or_repeat(ptr);
-    if (node->right != NULL)
+    if (!is_unmatched(probe))
     {
-        if (node->left->left->type != HGVS_Node_point &&
-            node->left->left->type != HGVS_Node_point_downstream &&
-            node->left->left->type != HGVS_Node_point_upstream &&
-            node->left->left->type != HGVS_Node_uncertain)
-        {
-            return parse_error(node, "invalid substitution or repeat");
-        } // if
-
+        node->right = probe;
+        *str = ptr;
         return node;
     } // if
 
-    node->right = deletion_or_delins(ptr);
-    if (node->right != NULL)
+    probe = deletion_or_deletion_insertion(&ptr);
+    if (is_error(probe))
     {
+        return error(node, probe, *str, "while matching a variant");
+    } // if
+    if (!is_unmatched(probe))
+    {
+        node->right = probe;
+        *str = ptr;
         return node;
     } // if
 
-    node->right = insertion(ptr);
-    if (node->right != NULL)
+    probe = insertion(&ptr);
+    if (is_error(probe))
     {
-        if (node->left->left->type != HGVS_Node_range &&
-            node->left->left->type != HGVS_Node_uncertain)
-        {
-            return parse_error(node, "invalid insertion (range)");
-        } // if
+        return error(node, probe, *str, "while matching a variant");
+    } // if
+    if (!is_unmatched(probe))
+    {
+        node->right = probe;
+        *str = ptr;
         return node;
     } // if
 
-    node->right = duplication(ptr);
-    if (node->right != NULL)
+    probe = duplication(&ptr);
+    if (is_error(probe))
     {
+        return error(node, probe, *str, "while matching a variant");
+    } // if
+    if (!is_unmatched(probe))
+    {
+        node->right = probe;
+        *str = ptr;
         return node;
     } // if
 
-    node->right = inversion(ptr);
-    if (node->right != NULL)
+    probe = equal(&ptr);
+    if (is_error(probe))
     {
-        if (node->left->left->type != HGVS_Node_range)
-        {
-            return parse_error(node, "invalid inversion (range)");
-        } // if
+        return error(node, probe, *str, "while matching a variant");
+    } // if
+    if (!is_unmatched(probe))
+    {
+        node->right = probe;
+        *str = ptr;
         return node;
     } // if
 
-    node->right = conversion(ptr);
-    if (node->right != NULL)
+    probe = inversion(&ptr);
+    if (is_error(probe))
     {
-        if (node->left->left->type != HGVS_Node_range)
-        {
-            return parse_error(node, "invalid conversion (range)");
-        } // if
+        return error(node, probe, *str, "while matching a variant");
+    } // if
+    if (!is_unmatched(probe))
+    {
+        node->right = probe;
+        *str = ptr;
         return node;
     } // if
 
-    node->right = equal(ptr);
-    if (node->right != NULL)
+    probe = repeat(&ptr);
+    if (is_error(probe))
     {
+        return error(node, probe, *str, "while matching a variant");
+    } // if
+    if (!is_unmatched(probe))
+    {
+        node->right = probe;
+        *str = ptr;
         return node;
     } // if
 
-    node->right = repeated_length(ptr);
-    if (node->right != NULL)
+    probe = conversion(&ptr);
+    if (is_error(probe))
     {
-        if (node->left->left->type != HGVS_Node_range)
-        {
-            return parse_error(node, "invalid repeat (range)");
-        } // if
+        return error(node, probe, *str, "while matching a variant");
+    } // if
+    if (!is_unmatched(probe))
+    {
+        node->right = probe;
+        *str = ptr;
         return node;
     } // if
 
-    return parse_error(node, "invalid variant");
-} // location
+    return error(node, NULL, ptr, "expected: '=', con', 'del', 'dup', 'ins', 'inv', substitution or repeat");
+} // variant
 
 
 static HGVS_Node*
-variants(char const** const ptr)
+allele(char const** const str)
 {
-    if (match_char(ptr, '='))
+    char const* ptr = *str;
+    if (match_char(&ptr, '['))
     {
-        HGVS_Node* const node = create(HGVS_Node_equal_all);
-        if (node == NULL)
+        if (match_char(&ptr, '='))
         {
-            return allocation_error(NULL);
+            HGVS_Node* const node = create(HGVS_Node_equal_allele);
+            if (is_error_allocation(node))
+            {
+                return error_allocation(NULL);
+            } // if
+
+            if (!match_char(&ptr, ']'))
+            {
+                return error(node, NULL, ptr, "expected: ']'");
+            } // if
+
+            *str = ptr;
+            return node;
         } // if
 
-        return node;
-    } // if
-
-    if (match_char(ptr, '['))
-    {
-        HGVS_Node* const node = variant(ptr);
-        if (node == NULL)
+        HGVS_Node* const node = create(HGVS_Node_variant_list);
+        if (is_error_allocation(node))
         {
-            return parse_error(NULL, "invalid variant compound");
+            return error_allocation(NULL);
         } // if
+
+        HGVS_Node* probe = variant(&ptr);
+        if (is_error(probe))
+        {
+            return error(node, probe, *str, "while matching an allele");
+        } // if
+        if (is_unmatched(probe))
+        {
+            return error(node, NULL, ptr, "expected a variant");
+        } // if
+
+        node->left = probe;
 
         HGVS_Node* tmp = node;
-        while (match_char(ptr, ';'))
+        while (match_char(&ptr, ';'))
         {
-            tmp->right = variant(ptr);
-            if (tmp->right == NULL)
+            HGVS_Node* const next = create(HGVS_Node_variant_list);
+            if (is_error_allocation(node))
             {
-                return parse_error(node, "invalid variant compound");
+                return error_allocation(node);
             } // if
+
+            probe = variant(&ptr);
+            if (is_error(probe))
+            {
+                HGVS_Node_destroy(next);
+                return error(node, probe, *str, "while matching an allele");
+            } // if
+            if (is_unmatched(probe))
+            {
+                HGVS_Node_destroy(next);
+                return error(node, NULL, ptr, "expected a variant");
+            } // if
+
+            next->left = probe;
+
+            tmp->right = next;
             tmp = tmp->right;
         } // while
 
-        if (!match_char(ptr, ']'))
+        if (!match_char(&ptr, ']'))
         {
-            return parse_error(node, "invalid variant compound");
+            return error(node, NULL, ptr, "expected: ']'");
         } // if
 
+        *str = ptr;
         return node;
     } // if
 
-    return variant(ptr);
-} // variants
+    if (match_char(&ptr, '='))
+    {
+        HGVS_Node* const node = create(HGVS_Node_equal_allele);
+        if (is_error_allocation(node))
+        {
+            return error_allocation(NULL);
+        } // if
+
+        *str = ptr;
+        return node;
+    } // if
+
+    HGVS_Node* const node = variant(&ptr);
+    if (is_error(node))
+    {
+        return error(NULL, node, *str, "while matching an allele");
+    } // if
+    if (is_unmatched(node))
+    {
+        return error(NULL, NULL, ptr, "expected a variant, variant list or '='");
+    } // if
+
+    if (*ptr != '\0')
+    {
+        return error(node, NULL, ptr, "unmatched input");
+    } // if
+
+    *str = ptr;
+    return node;
+} // allele
+
+
+void
+error_print_indent(char const* const str, char const* const ptr)
+{
+    for(ptrdiff_t i = 0; i < ptr - str; ++i)
+    {
+        fprintf(stderr, " ");
+    } // if
+} // error_print_indent
+
+
+void
+error_print(HGVS_Node* node, char const* const str)
+{
+    if (is_error(node))
+    {
+        error_print(node->right, str);
+        error_print_indent(str, node->ptr);
+        fprintf(stderr, "^  (%u)  %s\n", (node->left->left != NULL ? node->left->left->type : 0), node->left->ptr);
+    } // if
+} // error_print
 
 
 HGVS_Node*
@@ -956,11 +1531,15 @@ HGVS_parse(char const* const str)
 {
     char const* ptr = str;
 
-    HGVS_Node* const node = variants(&ptr);
-    if (*ptr != '\0')
+    HGVS_Node* const node = allele(&ptr);
+
+    if (is_error(node))
     {
-        fprintf(stderr, "ptr: %s\n", ptr);
-        return parse_error(node, "input left");
+
+        fprintf(stderr, "ERROR:\n%s\n", str);
+        error_print(node, str);
+        HGVS_Node_destroy(node);
+        return unmatched(NULL);
     } // if
 
     return node;

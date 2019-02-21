@@ -2,61 +2,58 @@
 #define __hgvs_parser_h__
 
 
-#include <stdlib.h>
+#include <stddef.h>
 
 
-static size_t const INVERTED = -1;
+static size_t const HGVS_Node_downstream = 1;
+static size_t const HGVS_Node_upstream   = 2;
+static size_t const HGVS_Node_negative   = 1;
+static size_t const HGVS_Node_positive   = 2;
+static size_t const HGVS_Node_inverted   = 1;
 
 
 typedef struct HGVS_Node
 {
     enum HGVS_Node_Type
     {
+        HGVS_Node_error_allocation,
+        HGVS_Node_error,
+        HGVS_Node_error_context,
         HGVS_Node_number,
-        HGVS_Node_position_uncertain,
-        HGVS_Node_offset_negative,
-        HGVS_Node_offset_positive,
+        HGVS_Node_unknown,
         HGVS_Node_point,
-        HGVS_Node_point_downstream,
-        HGVS_Node_point_upstream,
+        HGVS_Node_offset,
+        HGVS_Node_position,
         HGVS_Node_uncertain,
-        HGVS_Node_location,
         HGVS_Node_range,
-        HGVS_Node_substitution,
-        HGVS_Node_repeated,
-        HGVS_Node_repeated_range,
-        HGVS_Node_insertion,
-        HGVS_Node_inserted,
-        HGVS_Node_inserted_range,
-        HGVS_Node_inserted_uncertain,
-        HGVS_Node_deletion,
+        HGVS_Node_sequence,
+        HGVS_Node_variant,
         HGVS_Node_duplication,
         HGVS_Node_inversion,
-        HGVS_Node_conversion,
-        HGVS_Node_equal,
+        HGVS_Node_deletion,
         HGVS_Node_deletion_insertion,
-        HGVS_Node_variant,
-        HGVS_Node_equal_all
+        HGVS_Node_substitution,
+        HGVS_Node_inserted,
+        HGVS_Node_inserted_compound,
+        HGVS_Node_insertion,
+        HGVS_Node_range_exact,
+        HGVS_Node_conversion,
+        HGVS_Node_repeat,
+        HGVS_Node_equal,
+        HGVS_Node_equal_allele,
+        HGVS_Node_variant_list,
     } HGVS_Node_Type;
 
-    enum HGVS_Node_Type type;
-    struct HGVS_Node*   left;
-    struct HGVS_Node*   right;
+    struct HGVS_Node* left;
+    struct HGVS_Node* right;
 
-    union
-    {
-        size_t value;
-        struct
-        {
-            char deleted;
-            char inserted;
-        } substitution;
-    } data;
+    enum HGVS_Node_Type type;
+    size_t              data;
     char const*         ptr;
 } HGVS_Node;
 
 
-HGVS_Node*
+void
 HGVS_Node_destroy(HGVS_Node* node);
 
 

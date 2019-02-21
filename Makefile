@@ -22,7 +22,8 @@ release: all
 all: $(TARGET)
 
 check: $(TARGET)
-	tests/run_tests.sh < tests/valid.in
+	tests/run_tests.sh -m < tests/varnomen.in
+	tests/run_tests.sh -fm < tests/error.in
 
 clean:
 	rm -f $(OBJECTS) $(DEPS) $(TARGET)
