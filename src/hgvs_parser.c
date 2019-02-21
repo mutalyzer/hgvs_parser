@@ -1,14 +1,6 @@
 #include "../include/hgvs_parser.h"
 
 
-/*
-TODO list
-- multi line indent
-- EBNF
-- implement reference
-*/
-
-
 #include <ctype.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -722,7 +714,7 @@ length(char const** const str)
 
             node->left = probe;
 
-            probe = number(&ptr);
+            probe = number_or_unknown(&ptr);
             if (is_error(probe))
             {
                 return error(node, probe, *str, "while matching an insert length");
@@ -837,7 +829,7 @@ reference(char const** const str, size_t const prefix)
             HGVS_Node* const probe = allele(&ptr);
             if (is_error(probe))
             {
-                return error(node, NULL, *str, "while matching a reference");
+                return error(node, probe, *str, "while matching a reference");
             } // if
             if (is_unmatched(probe))
             {
@@ -1650,16 +1642,21 @@ HGVS_parse(char const* const str)
 {
     char const* ptr = str;
 
-    HGVS_Node* const node = allele(&ptr);
-
-    if (is_error(node))
+    if (isalpha(*ptr))
     {
+        HGVS_Node* const node = reference(&ptr, 0);
 
-        fprintf(stderr, "ERROR:\n%s\n", str);
-        error_print(node, str);
-        HGVS_Node_destroy(node);
-        return unmatched(NULL);
+        if (is_error(node))
+        {
+
+            fprintf(stderr, "ERROR:\n%s\n", str);
+            error_print(node, str);
+            HGVS_Node_destroy(node);
+            return unmatched(NULL);
+        } // if
+
+        return node;
     } // if
 
-    return node;
+    return NULL;
 } // HGVS_parse
