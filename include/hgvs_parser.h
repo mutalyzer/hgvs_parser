@@ -10,6 +10,12 @@ static size_t const HGVS_Node_upstream   = 2;
 static size_t const HGVS_Node_negative   = 1;
 static size_t const HGVS_Node_positive   = 2;
 static size_t const HGVS_Node_inverted   = 1;
+static size_t const HGVS_Node_system_c   = 1;
+static size_t const HGVS_Node_system_g   = 2;
+static size_t const HGVS_Node_system_m   = 3;
+static size_t const HGVS_Node_system_n   = 4;
+static size_t const HGVS_Node_system_o   = 5;
+static size_t const HGVS_Node_system_r   = 6;
 
 
 typedef struct HGVS_Node
@@ -42,6 +48,8 @@ typedef struct HGVS_Node
         HGVS_Node_equal,
         HGVS_Node_equal_allele,
         HGVS_Node_variant_list,
+        HGVS_Node_reference,
+        HGVS_Node_reference_identifier
     } HGVS_Node_Type;
 
     struct HGVS_Node* left;

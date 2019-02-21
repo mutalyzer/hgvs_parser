@@ -40,6 +40,9 @@ static HGVS_Node allocation_error =
 }; // allocation_error
 
 
+static HGVS_Node* allele(char const** const str);
+
+
 static inline bool
 is_IUPAC_NT(char const ch)
 {
@@ -160,6 +163,29 @@ match_string(char const** const str, char const* tok)
     } // if
     return false;
 } // match_string
+
+
+static inline bool
+match_reference(char const** const str, size_t* len)
+{
+    *len = 0;
+    char const* ptr = *str;
+    while (isalnum(*ptr) || *ptr == '_' ||
+                            *ptr == '(' ||
+                            *ptr == ')' ||
+                            *ptr == '.')
+    {
+        ptr += 1;
+        *len += 1;
+    } // while
+
+    if (*len > 0)
+    {
+        *str = ptr;
+        return true;
+    } // if
+    return false;
+} // match_reference
 
 
 static inline bool
@@ -671,36 +697,179 @@ sequence(char const** const str)
 
 
 static HGVS_Node*
-sequence_or_number(char const** const str)
+length(char const** const str)
 {
     char const* ptr = *str;
-    if (is_decimal_digit(*ptr))
+    if (match_char(&ptr, '('))
     {
-        HGVS_Node* const node = number(&ptr);
-        if (is_error(node))
+        HGVS_Node* probe = number_or_unknown(&ptr);
+        if (is_error(probe))
         {
-            return error(NULL, node, *str, "while matching a sequence or number");
+            return error(NULL, probe, *str, "while matching an insert length");
+        } // if
+        if (is_unmatched(probe))
+        {
+            return unmatched(NULL);
+        } // if
+
+        if (match_char(&ptr, '_'))
+        {
+            HGVS_Node* const node = create(HGVS_Node_range_exact);
+            if (is_error_allocation(node))
+            {
+                return error_allocation(probe);
+            } // if
+
+            node->left = probe;
+
+            probe = number(&ptr);
+            if (is_error(probe))
+            {
+                return error(node, probe, *str, "while matching an insert length");
+            } // if
+            if (is_unmatched(probe))
+            {
+                return unmatched(node);
+            } // if
+
+            node->right = probe;
+
+            if (!match_char(&ptr, ')'))
+            {
+                return unmatched(node);
+            } // if
+
+            *str = ptr;
+            return node;
+        } // if
+
+        if (!match_char(&ptr, ')'))
+        {
+            return unmatched(probe);
         } // if
 
         *str = ptr;
-        return node;
+        return probe;
     } // if
 
-    HGVS_Node* const node = sequence(&ptr);
+    return unmatched(NULL);
+} // length
+
+
+static HGVS_Node*
+sequence_or_length(char const** const str)
+{
+    char const* ptr = *str;
+    HGVS_Node* node = length(&ptr);
     if (is_error(node))
     {
-        return error(NULL, node, *str, "while matching a sequence or number");
+        return error(NULL, node, *str, "while matching a sequence or length");
+    } // if
+    if (is_unmatched(node))
+    {
+        node = sequence(&ptr);
+        if (is_error(node))
+        {
+            return error(NULL, node, *str, "while matching a sequence or length");
+        } // if
     } // if
 
     *str = ptr;
     return node;
-} // sequence_or_number
+} // sequence_or_length
 
 
 static HGVS_Node*
-reference(char const** const str)
+reference(char const** const str, size_t const prefix)
 {
-    fprintf(stderr, "*** NOT IMPLEMENTED (reference) ***\n  %s\n", *str);
+    char const* ptr = *str;
+    size_t len = 0;
+    match_reference(&ptr, &len);
+
+    if (prefix + len > 0)
+    {
+        if (!match_char(&ptr, ':'))
+        {
+            return error(NULL, NULL, ptr, "expected: ':'");
+        } // if
+
+        HGVS_Node* const node = create(HGVS_Node_reference);
+        if (is_error_allocation(node))
+        {
+            return error_allocation(NULL);
+        } // if
+
+        node->left = create(HGVS_Node_reference_identifier);
+        if (is_error_allocation(node->left))
+        {
+            return error_allocation(node);
+        } // if
+
+        node->left->ptr = *str - prefix;
+        node->left->data = prefix + len;
+
+        if (match_char(&ptr, 'c'))
+        {
+            node->data = HGVS_Node_system_c;
+        } // if
+        else if (match_char(&ptr, 'g'))
+        {
+            node->data = HGVS_Node_system_g;
+        } // if
+        else if (match_char(&ptr, 'm'))
+        {
+            node->data = HGVS_Node_system_m;
+        } // if
+        else if (match_char(&ptr, 'n'))
+        {
+            node->data = HGVS_Node_system_n;
+        } // if
+        else if (match_char(&ptr, 'o'))
+        {
+            node->data = HGVS_Node_system_o;
+        } // if
+        else if (match_char(&ptr, 'r'))
+        {
+            node->data = HGVS_Node_system_r;
+        } // if
+        else
+        {
+            HGVS_Node* const probe = allele(&ptr);
+            if (is_error(probe))
+            {
+                return error(node, NULL, *str, "while matching a reference");
+            } // if
+            if (is_unmatched(probe))
+            {
+                return error(node, NULL, ptr, "expeced an allele");
+            } // if
+
+            node->right = probe;
+
+            *str = ptr;
+            return node;
+        } // else
+
+        if (!match_char(&ptr, '.'))
+        {
+            return error(node, NULL, ptr, "expected: '.'");
+        } // if
+
+        HGVS_Node* const probe = allele(&ptr);
+        if (is_error(probe))
+        {
+            return error(node, NULL, *str, "while matching a reference");
+        } // if
+        if (is_unmatched(probe))
+        {
+            return error(node, NULL, ptr, "expeced an allele");
+        } // if
+
+        node->right = probe;
+
+        *str = ptr;
+        return node;
+    } // if
 
     return unmatched(NULL);
 } // reference
@@ -720,7 +889,18 @@ sequence_or_reference(char const** const str)
 
     if (isalnum(*ptr) != 0 || *ptr == '_')
     {
-        return reference(&ptr);
+        HGVS_Node* const node = reference(&ptr, len);
+        if (is_error(node))
+        {
+            return error(NULL, node, *str, "while matching a reference");
+        } // if
+        if (is_unmatched(node))
+        {
+            return error(NULL, NULL, ptr, "expected a reference");
+        } // if
+
+        *str = ptr;
+        return node;
     } // if
 
     HGVS_Node* const node = create(HGVS_Node_sequence);
@@ -749,7 +929,7 @@ duplication(char const** const str)
             return error_allocation(NULL);
         } // if
 
-        HGVS_Node* const probe = sequence_or_number(&ptr);
+        HGVS_Node* const probe = sequence_or_length(&ptr);
         if (is_error(probe))
         {
             return error(node, probe, *str, "while matching a duplication");
@@ -777,7 +957,7 @@ inversion(char const** const str)
             return error_allocation(NULL);
         } // if
 
-        HGVS_Node* const probe = sequence_or_number(&ptr);
+        HGVS_Node* const probe = sequence_or_length(&ptr);
         if (is_error(probe))
         {
             return error(node, probe, *str, "while matching an inversion");
@@ -934,70 +1114,10 @@ substitution_or_repeat(char const** const str)
 
 
 static HGVS_Node*
-insert_length(char const** const str)
-{
-    char const* ptr = *str;
-    if (match_char(&ptr, '('))
-    {
-        HGVS_Node* probe = number_or_unknown(&ptr);
-        if (is_error(probe))
-        {
-            return error(NULL, probe, *str, "while matching an insert length");
-        } // if
-        if (is_unmatched(probe))
-        {
-            return unmatched(NULL);
-        } // if
-
-        if (match_char(&ptr, '_'))
-        {
-            HGVS_Node* const node = create(HGVS_Node_range_exact);
-            if (is_error_allocation(node))
-            {
-                return error_allocation(probe);
-            } // if
-
-            node->left = probe;
-
-            probe = number(&ptr);
-            if (is_error(probe))
-            {
-                return error(node, probe, *str, "while matching an insert length");
-            } // if
-            if (is_unmatched(probe))
-            {
-                return unmatched(node);
-            } // if
-
-            node->right = probe;
-
-            if (!match_char(&ptr, ')'))
-            {
-                return unmatched(node);
-            } // if
-
-            *str = ptr;
-            return node;
-        } // if
-
-        if (!match_char(&ptr, ')'))
-        {
-            return unmatched(probe);
-        } // if
-
-        *str = ptr;
-        return probe;
-    } // if
-
-    return unmatched(NULL);
-} // insert_length
-
-
-static HGVS_Node*
 insert(char const** const str)
 {
     char const* ptr = *str;
-    HGVS_Node* probe = insert_length(&ptr);
+    HGVS_Node* probe = length(&ptr);
     if (is_error(probe))
     {
         return error(NULL, probe, *str, "while matching an insert");
@@ -1005,12 +1125,11 @@ insert(char const** const str)
 
     if (is_unmatched(probe))
     {
-        HGVS_Node* probe = range(&ptr);
+        probe = range(&ptr);
         if (is_error(probe))
         {
             return error(NULL, probe, *str, "while matching an insert");
         } // if
-
         if (is_unmatched(probe))
         {
             probe = sequence_or_reference(&ptr);
@@ -1112,7 +1231,7 @@ deletion_or_deletion_insertion(char const** const str)
     char const* ptr = *str;
     if (match_string(&ptr, "del"))
     {
-        HGVS_Node* probe = sequence_or_number(&ptr);
+        HGVS_Node* probe = sequence_or_length(&ptr);
         if (is_error(probe))
         {
             return error(NULL, probe, *str, "while matching a deletion or deletion/insertion");
@@ -1186,7 +1305,7 @@ range_or_reference(char const** const str)
     } // if
     if (is_unmatched(node))
     {
-        node = reference(&ptr);
+        node = reference(&ptr, 0);
         if (is_error(node))
         {
             return error(NULL, node, *str, "while matching a range or reference");
