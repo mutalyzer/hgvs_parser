@@ -863,7 +863,7 @@ reference(char const** const str, size_t const prefix)
         HGVS_Node* const probe = allele(&ptr);
         if (is_error(probe))
         {
-            return error(node, NULL, *str, "while matching a reference");
+            return error(node, probe, *str, "while matching a reference");
         } // if
         if (is_unmatched(probe))
         {
@@ -1608,14 +1608,11 @@ allele(char const** const str)
         return node;
     } // if
 
+
     HGVS_Node* const node = variant(&ptr);
     if (is_error(node))
     {
         return error(NULL, node, *str, "while matching an allele");
-    } // if
-    if (is_unmatched(node))
-    {
-        return error(NULL, NULL, ptr, "expected a variant, variant list or '='");
     } // if
 
     if (*ptr != '\0')
