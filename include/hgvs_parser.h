@@ -18,7 +18,7 @@ typedef struct HGVS_Node
     {
         HGVS_Node_error_allocation,
         HGVS_Node_error,
-        HGVS_Node_error_message,
+        HGVS_Node_error_context,
         HGVS_Node_number,
         HGVS_Node_unknown,
         HGVS_Node_point,

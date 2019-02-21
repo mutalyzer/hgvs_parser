@@ -1,6 +1,18 @@
 #include "../include/hgvs_parser.h"
 
 
+/*
+TODO list
+- valgrind
+- multiple tests: varnomen, extra, error
+- allocation testing
+- allocation context?
+- multi line indent
+- EBNF
+- implement reference
+*/
+
+
 #include <ctype.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -12,19 +24,19 @@
 static size_t const MAX_INTEGER = SIZE_MAX / 10 - 10;
 
 
-static HGVS_Node allocation_error_msg =
+static HGVS_Node allocation_error_context =
 {
     .left  = NULL,
     .right = NULL,
-    .type  = HGVS_Node_error_message,
+    .type  = HGVS_Node_error_context,
     .data  = 0,
     .ptr   = "allocation error"
-}; // allocation_error_msg
+}; // allocation_error_context
 
 
 static HGVS_Node allocation_error =
 {
-    .left  = &allocation_error_msg,
+    .left  = &allocation_error_context,
     .right = NULL,
     .type  = HGVS_Node_error_allocation,
     .data  = 0,
@@ -217,28 +229,29 @@ create(enum HGVS_Node_Type const type)
 
 
 static HGVS_Node*
-error(HGVS_Node*        node,
+error(HGVS_Node* const  node,
       HGVS_Node* const  next,
       char const* const ptr,
       char const* const msg)
 {
-    HGVS_Node_destroy(node);
-
-    node = create(HGVS_Node_error);
-    if (is_error_allocation(node))
+    HGVS_Node* const err = create(HGVS_Node_error);
+    if (is_error_allocation(err))
     {
+        HGVS_Node_destroy(node);
         return error_allocation(next);
     } // if
 
-    node->right = next;
-    node->left = create(HGVS_Node_error_message);
-    if (is_error_allocation(node))
+    err->right = next;
+    err->left = create(HGVS_Node_error_context);
+    if (is_error_allocation(err->left))
     {
-        return error_allocation(node);
+        HGVS_Node_destroy(node);
+        return error_allocation(err);
     } // if
-    node->left->ptr = msg;
+    err->left = node;
+    err->left->ptr = msg;
 
-    node->ptr = ptr;
+    err->ptr = ptr;
 
     return node;
 } // error
@@ -985,7 +998,6 @@ insert(char const** const str)
     HGVS_Node* probe = insert_length(&ptr);
     if (is_error(probe))
     {
-        // try next: this is a dirty hack: combine range and insert length
         HGVS_Node_destroy(probe);
         probe = unmatched(NULL);
     } // if
