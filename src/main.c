@@ -23,6 +23,6 @@ main(int argc, char* argv[])
 
     HGVS_Node_destroy(root);
 
-    fprintf(stderr, "success\n");
+    fprintf(stderr, "ok.\n");
     return EXIT_SUCCESS;
 } // main
