@@ -68,4 +68,7 @@ HGVS_Node*
 HGVS_parse(char const* const str);
 
 
+size_t
+HGVS_write(HGVS_Node const* const node);
+
 #endif

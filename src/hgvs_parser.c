@@ -1,6 +1,17 @@
 #include "../include/hgvs_parser.h"
 
 
+/*
+ToDo:
+    - syntax highlighter (html, LaTeX, console, plain, ...)
+    - multi-allele
+    - update varnomen examples
+    - re-implement coordinate system
+    - mosaic / chimaeric?
+*/
+
+
+
 #include <ctype.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -798,7 +809,7 @@ reference(char const** const str, size_t const prefix)
                 } // if
 
                 node->left->ptr = ptr - len;
-                node->data = len;
+                node->left->data = len;
 
                 if (!match_char(&ptr, ')'))
                 {
@@ -1665,8 +1676,99 @@ HGVS_parse(char const* const str)
             return unmatched(NULL);
         } // if
 
+        printf("generated: ");
+        HGVS_write(node);
+        printf("\n");
+
         return node;
     } // if
 
     return NULL;
 } // HGVS_parse
+
+
+size_t
+HGVS_write(HGVS_Node const* const node)
+{
+    if (node != NULL)
+    {
+        switch (node->type)
+        {
+            case HGVS_Node_number:
+                return printf("%zu", node->data);
+            case HGVS_Node_unknown:
+                return printf("?");
+            case HGVS_Node_point:
+                if (node->data == HGVS_Node_downstream)
+                {
+                    return printf("-") + HGVS_write(node->left) + HGVS_write(node->right);
+                } // if
+                else if (node->data == HGVS_Node_upstream)
+                {
+                    return printf("+") + HGVS_write(node->left) + HGVS_write(node->right);
+                } // if
+                return HGVS_write(node->left) + HGVS_write(node->right);
+            case HGVS_Node_offset:
+                if (node->data == HGVS_Node_negative)
+                {
+                    return printf("-") + HGVS_write(node->left);
+                } // if
+                return printf("+") + HGVS_write(node->left);
+            case HGVS_Node_position:
+                return HGVS_write(node->left);
+            case HGVS_Node_uncertain:
+                return printf("(") + HGVS_write(node->left) + printf("_") + HGVS_write(node->right) + printf(")");
+            case HGVS_Node_range:
+                return HGVS_write(node->left) + printf("_") + HGVS_write(node->right);
+            case HGVS_Node_sequence:
+                return printf("%.*s", (int) node->data, node->ptr);
+            case HGVS_Node_variant:
+                return HGVS_write(node->left) + HGVS_write(node->right);
+            case HGVS_Node_duplication:
+                return printf("dup") + HGVS_write(node->left);
+            case HGVS_Node_inversion:
+                return printf("inv") + HGVS_write(node->left);
+            case HGVS_Node_deletion:
+                return printf("del") + HGVS_write(node->left);
+            case HGVS_Node_deletion_insertion:
+                return printf("del") + HGVS_write(node->left) + printf("ins") + HGVS_write(node->right);
+            case HGVS_Node_substitution:
+                return HGVS_write(node->left) + printf(">") + HGVS_write(node->right);
+            case HGVS_Node_inserted:
+                if (node->data == HGVS_Node_inverted)
+                {
+                    return HGVS_write(node->left) + printf("inv") + HGVS_write(node->right);
+                } // if
+                return HGVS_write(node->left) + HGVS_write(node->right);
+
+            // case HGVS_Node_inserted_compound
+
+            case HGVS_Node_insertion:
+                return printf("ins") + HGVS_write(node->left);
+            case HGVS_Node_range_exact:
+                return printf("(") + HGVS_write(node->left) + printf("_") + HGVS_write(node->right) + printf(")");
+            case HGVS_Node_conversion:
+                return printf("con") + HGVS_write(node->left);
+
+            // case HGVS_Node_repeat
+
+            case HGVS_Node_equal:
+                return printf("=");
+            case HGVS_Node_equal_allele:
+                return printf("=");
+
+            // case HGVS_Node_variant_list:
+
+            case HGVS_Node_reference:
+                if (node->left != NULL)
+                {
+                    return printf("%.*s", (int) node->data, node->ptr) + printf("(%.*s):", (int) node->left->data, node->left->ptr) + HGVS_write(node->right);
+                } // if
+                return printf("%.*s", (int) node->data, node->ptr) + printf(":") + HGVS_write(node->right);
+
+            default:
+                return printf("*** not implemented (%u) ***", node->type);
+        } // switch
+    } // if
+    return 0;
+} // HGVS_write
