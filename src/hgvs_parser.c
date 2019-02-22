@@ -4,9 +4,7 @@
 /*
 ToDo:
     - syntax highlighter (html, LaTeX, console, plain, ...)
-    - multi-allele
-    - update varnomen examples
-    - calculate list lengths
+    - multi-allele?
     - mosaic / chimaeric?
 */
 
@@ -18,6 +16,31 @@ ToDo:
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+
+static char const* const ANSI_RESET       = "\033[0m";
+static char const* const ANSI_BLACK       = "\033[30m";
+static char const* const ANSI_RED         = "\033[31m";
+static char const* const ANSI_GREEN       = "\033[32m";
+static char const* const ANSI_YELLOW      = "\033[33m";
+static char const* const ANSI_BLUE        = "\033[34m";
+static char const* const ANSI_MAGENTA     = "\033[35m";
+static char const* const ANSI_CYAN        = "\033[36m";
+static char const* const ANSI_WHITE       = "\033[37m";
+static char const* const ANSI_BOLDBLACK   = "\033[1m\033[30m";
+static char const* const ANSI_BOLDRED     = "\033[1m\033[31m";
+static char const* const ANSI_BOLDGREEN   = "\033[1m\033[32m";
+static char const* const ANSI_BOLDYELLOW  = "\033[1m\033[33m";
+static char const* const ANSI_BOLDBLUE    = "\033[1m\033[34m";
+static char const* const ANSI_BOLDMAGENTA = "\033[1m\033[35m";
+static char const* const ANSI_BOLDCYAN    = "\033[1m\033[36m";
+static char const* const ANSI_BOLDWHITE   = "\033[1m\033[37m";
+
+
+static char const* const* const HGVS_Token_number   = &ANSI_CYAN;
+static char const* const* const HGVS_Token_variant  = &ANSI_GREEN;
+static char const* const* const HGVS_Token_sequence = &ANSI_MAGENTA;
+static char const* const* const HGVS_Token_operator = &ANSI_RED;
 
 
 static size_t const MAX_INTEGER = SIZE_MAX / 10 - 10;
@@ -1190,6 +1213,7 @@ inserted(char const** const str)
         } // if
 
         node->left = probe;
+        node->data = 1;
 
         HGVS_Node* tmp = node;
         while (match_char(&ptr, ';'))
@@ -1208,10 +1232,12 @@ inserted(char const** const str)
             } // if
 
             next->left = probe;
+            node->data += 1;
 
             tmp->right = next;
             tmp = tmp->right;
         } // while
+
 
         if (!match_char(&ptr, ']'))
         {
@@ -1547,6 +1573,7 @@ allele(char const** const str)
         } // if
 
         node->left = probe;
+        node->data = 1;
 
         HGVS_Node* tmp = node;
         while (match_char(&ptr, ';'))
@@ -1570,6 +1597,7 @@ allele(char const** const str)
             } // if
 
             next->left = probe;
+            node->data += 1;
 
             tmp->right = next;
             tmp = tmp->right;
@@ -1681,25 +1709,25 @@ HGVS_write(HGVS_Node const* const node)
         switch (node->type)
         {
             case HGVS_Node_number:
-                return printf("%zu", node->data);
+                return printf("%s%zu%s" , *HGVS_Token_number, node->data, ANSI_RESET);
             case HGVS_Node_unknown:
-                return printf("?");
+                return printf("%s?%s", *HGVS_Token_number, ANSI_RESET);
             case HGVS_Node_point:
                 if (node->data == HGVS_Node_downstream)
                 {
-                    return printf("-") + HGVS_write(node->left) + HGVS_write(node->right);
+                    return printf("%s-%s", *HGVS_Token_operator, ANSI_RESET) + HGVS_write(node->left) + HGVS_write(node->right);
                 } // if
                 else if (node->data == HGVS_Node_upstream)
                 {
-                    return printf("+") + HGVS_write(node->left) + HGVS_write(node->right);
+                    return printf("%s*%s", *HGVS_Token_operator, ANSI_RESET) + HGVS_write(node->left) + HGVS_write(node->right);
                 } // if
                 return HGVS_write(node->left) + HGVS_write(node->right);
             case HGVS_Node_offset:
                 if (node->data == HGVS_Node_negative)
                 {
-                    return printf("-") + HGVS_write(node->left);
+                    return printf("%s-%s", *HGVS_Token_operator, ANSI_RESET) + HGVS_write(node->left);
                 } // if
-                return printf("+") + HGVS_write(node->left);
+                return printf("%s+%s", *HGVS_Token_operator, ANSI_RESET) + HGVS_write(node->left);
             case HGVS_Node_position:
                 return HGVS_write(node->left);
             case HGVS_Node_uncertain:
@@ -1707,23 +1735,23 @@ HGVS_write(HGVS_Node const* const node)
             case HGVS_Node_range:
                 return HGVS_write(node->left) + printf("_") + HGVS_write(node->right);
             case HGVS_Node_sequence:
-                return printf("%.*s", (int) node->data, node->ptr);
+                return printf("%s%.*s%s", *HGVS_Token_sequence, (int) node->data, node->ptr, ANSI_RESET);
             case HGVS_Node_variant:
                 return HGVS_write(node->left) + HGVS_write(node->right);
             case HGVS_Node_duplication:
-                return printf("dup") + HGVS_write(node->left);
+                return printf("%sdup%s", *HGVS_Token_variant, ANSI_RESET) + HGVS_write(node->left);
             case HGVS_Node_inversion:
-                return printf("inv") + HGVS_write(node->left);
+                return printf("%sinv%s", *HGVS_Token_variant, ANSI_RESET) + HGVS_write(node->left);
             case HGVS_Node_deletion:
-                return printf("del") + HGVS_write(node->left);
+                return printf("%sdel%s", *HGVS_Token_variant, ANSI_RESET) + HGVS_write(node->left);
             case HGVS_Node_deletion_insertion:
-                return printf("del") + HGVS_write(node->left) + printf("ins") + HGVS_write(node->right);
+                return printf("%sdel%s", *HGVS_Token_variant, ANSI_RESET) + HGVS_write(node->left) + printf("%sins%s", *HGVS_Token_variant, ANSI_RESET) + HGVS_write(node->right);
             case HGVS_Node_substitution:
-                return HGVS_write(node->left) + printf(">") + HGVS_write(node->right);
+                return HGVS_write(node->left) + printf("%s>%s", *HGVS_Token_variant, ANSI_RESET) + HGVS_write(node->right);
             case HGVS_Node_inserted:
                 if (node->data == HGVS_Node_inverted)
                 {
-                    return HGVS_write(node->left) + printf("inv") + HGVS_write(node->right);
+                    return HGVS_write(node->left) + printf("%sinv%s", *HGVS_Token_variant, ANSI_RESET) + HGVS_write(node->right);
                 } // if
                 return HGVS_write(node->left) + HGVS_write(node->right);
             case HGVS_Node_inserted_compound:
@@ -1736,17 +1764,17 @@ HGVS_write(HGVS_Node const* const node)
                 } // while
                 return res + printf("]");
             case HGVS_Node_insertion:
-                return printf("ins") + HGVS_write(node->left);
+                return printf("%sins%s", *HGVS_Token_variant, ANSI_RESET) + HGVS_write(node->left);
             case HGVS_Node_range_exact:
                 return HGVS_write(node->left) + printf("_") + HGVS_write(node->right);
             case HGVS_Node_conversion:
-                return printf("con") + HGVS_write(node->left);
+                return printf("%scon%s", *HGVS_Token_variant, ANSI_RESET) + HGVS_write(node->left);
             case HGVS_Node_repeat:
                 return printf("[") + HGVS_write(node->left) + printf("]");
             case HGVS_Node_equal:
-                return printf("=");
+                return printf("%s=%s", *HGVS_Token_variant, ANSI_RESET);
             case HGVS_Node_equal_allele:
-                return printf("=");
+                return printf("%s=%s", *HGVS_Token_variant, ANSI_RESET);
             case HGVS_Node_variant_list:
                 res = printf("[") + HGVS_write(node->left);
                 tmp = tmp->right;
