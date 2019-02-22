@@ -700,6 +700,12 @@ static HGVS_Node*
 length(char const** const str)
 {
     char const* ptr = *str;
+    HGVS_Node* const node = create(HGVS_Node_length);
+    if (is_error_allocation(node))
+    {
+        return error_allocation(NULL);
+    } // if
+
     if (match_char(&ptr, '('))
     {
         HGVS_Node* probe = number_or_unknown(&ptr);
@@ -712,15 +718,17 @@ length(char const** const str)
             return unmatched(NULL);
         } // if
 
+        node->left = probe;
+
         if (match_char(&ptr, '_'))
         {
-            HGVS_Node* const node = create(HGVS_Node_range_exact);
-            if (is_error_allocation(node))
+            node->left = create(HGVS_Node_range_exact);
+            if (is_error_allocation(node->left))
             {
-                return error_allocation(probe);
+                return error_allocation(node);
             } // if
 
-            node->left = probe;
+            node->left->left = probe;
 
             probe = number_or_unknown(&ptr);
             if (is_error(probe))
@@ -732,7 +740,7 @@ length(char const** const str)
                 return unmatched(node);
             } // if
 
-            node->right = probe;
+            node->left->right = probe;
 
             if (!match_char(&ptr, ')'))
             {
@@ -745,11 +753,11 @@ length(char const** const str)
 
         if (!match_char(&ptr, ')'))
         {
-            return unmatched(probe);
+            return unmatched(node);
         } // if
 
         *str = ptr;
-        return probe;
+        return node;
     } // if
 
     return unmatched(NULL);
@@ -1081,7 +1089,7 @@ substitution_or_repeat(char const** const str)
         return node;
     } // if
 
-    HGVS_Node* const node = create(HGVS_Node_repeat);
+    HGVS_Node* const node = create(HGVS_Node_repetition);
     if (is_error_allocation(node))
     {
         return error_allocation(probe);
@@ -1645,14 +1653,21 @@ HGVS_parse(char const* const str)
             return unmatched(NULL);
         } // if
 
-        printf("generated: ");
+        if (*ptr != '\0')
+        {
+            fprintf(stderr, "ERROR:\n%s\n", str);
+            fprintf(stderr, "input left: '%s'\n", ptr);
+            HGVS_Node_destroy(node);
+            return unmatched(NULL);
+        } // if
+
         HGVS_write(node);
         printf("\n");
 
         return node;
     } // if
 
-    return NULL;
+    return unmatched(NULL);
 } // HGVS_parse
 
 
@@ -1713,6 +1728,7 @@ HGVS_write(HGVS_Node const* const node)
                 return HGVS_write(node->left) + HGVS_write(node->right);
             case HGVS_Node_inserted_compound:
                 res = printf("[") + HGVS_write(node->left);
+                tmp = tmp->right;
                 while (!is_unmatched(tmp))
                 {
                     res += printf(";") + HGVS_write(tmp->left);
@@ -1722,14 +1738,10 @@ HGVS_write(HGVS_Node const* const node)
             case HGVS_Node_insertion:
                 return printf("ins") + HGVS_write(node->left);
             case HGVS_Node_range_exact:
-                return printf("(") + HGVS_write(node->left) + printf("_") + HGVS_write(node->right) + printf(")");
+                return HGVS_write(node->left) + printf("_") + HGVS_write(node->right);
             case HGVS_Node_conversion:
                 return printf("con") + HGVS_write(node->left);
             case HGVS_Node_repeat:
-                if (!is_unmatched(node->left) && node->left->type == HGVS_Node_range_exact)
-                {
-                    return HGVS_write(node->left);
-                }
                 return printf("[") + HGVS_write(node->left) + printf("]");
             case HGVS_Node_equal:
                 return printf("=");
@@ -1737,6 +1749,7 @@ HGVS_write(HGVS_Node const* const node)
                 return printf("=");
             case HGVS_Node_variant_list:
                 res = printf("[") + HGVS_write(node->left);
+                tmp = tmp->right;
                 while (!is_unmatched(tmp))
                 {
                     res += printf(";") + HGVS_write(tmp->left);
@@ -1746,7 +1759,7 @@ HGVS_write(HGVS_Node const* const node)
             case HGVS_Node_reference:
                 if (!is_unmatched(node->right))
                 {
-                    return printf("%.*s", (int) node->data, node->ptr) + printf("(%.*s):", (int) node->right->data, node->right->ptr) + HGVS_write(node->right);
+                    return printf("%.*s", (int) node->data, node->ptr) + printf("(%.*s):", (int) node->right->data, node->right->ptr) + HGVS_write(node->left);
                 } // if
                 return printf("%.*s", (int) node->data, node->ptr) + printf(":") + HGVS_write(node->left);
             case HGVS_Node_coordinate_system:
@@ -1755,6 +1768,10 @@ HGVS_write(HGVS_Node const* const node)
                     return printf("%c.", (char) node->data) + HGVS_write(node->left);
                 } // if
                 return HGVS_write(node->left);
+            case HGVS_Node_length:
+                return printf("(") + HGVS_write(node->left) + printf(")");
+            case HGVS_Node_repetition:
+                return HGVS_write(node->left) + HGVS_write(node->right);
 
             default:
                 return printf("*** not implemented (%u) ***", node->type);
