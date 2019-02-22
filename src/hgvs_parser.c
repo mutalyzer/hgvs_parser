@@ -6,7 +6,7 @@ ToDo:
     - syntax highlighter (html, LaTeX, console, plain, ...)
     - multi-allele
     - update varnomen examples
-    - re-implement coordinate system
+    - calculate list lengths
     - mosaic / chimaeric?
 */
 
@@ -705,7 +705,7 @@ length(char const** const str)
         HGVS_Node* probe = number_or_unknown(&ptr);
         if (is_error(probe))
         {
-            return error(NULL, probe, *str, "while matching an insert length");
+            return error(NULL, probe, *str, "while matching a length");
         } // if
         if (is_unmatched(probe))
         {
@@ -725,7 +725,7 @@ length(char const** const str)
             probe = number_or_unknown(&ptr);
             if (is_error(probe))
             {
-                return error(node, probe, *str, "while matching an insert length");
+                return error(node, probe, *str, "while matching a length");
             } // if
             if (is_unmatched(probe))
             {
@@ -802,14 +802,14 @@ reference(char const** const str, size_t const prefix)
             size_t len = 0;
             if (match_reference(&ptr, &len))
             {
-                node->left = create(HGVS_Node_reference);
-                if (is_error_allocation(node->left))
+                node->right = create(HGVS_Node_reference);
+                if (is_error_allocation(node->right))
                 {
                     return error_allocation(node);
                 } // if
 
-                node->left->ptr = ptr - len;
-                node->left->data = len;
+                node->right->ptr = ptr - len;
+                node->right->data = len;
 
                 if (!match_char(&ptr, ')'))
                 {
@@ -823,52 +823,21 @@ reference(char const** const str, size_t const prefix)
             return error(node, NULL, ptr, "expected: ':'");
         } // if
 
+        node->left = create(HGVS_Node_coordinate_system);
+        if (is_error_allocation(node->left))
+        {
+            return error_allocation(node);
+        } // if
 
-        if (match_char(&ptr, 'c'))
+        if (isalpha(*ptr) != 0)
         {
-            node->data = HGVS_Node_system_c;
-        } // if
-        else if (match_char(&ptr, 'g'))
-        {
-            node->data = HGVS_Node_system_g;
-        } // if
-        else if (match_char(&ptr, 'm'))
-        {
-            node->data = HGVS_Node_system_m;
-        } // if
-        else if (match_char(&ptr, 'n'))
-        {
-            node->data = HGVS_Node_system_n;
-        } // if
-        else if (match_char(&ptr, 'o'))
-        {
-            node->data = HGVS_Node_system_o;
-        } // if
-        else if (match_char(&ptr, 'r'))
-        {
-            node->data = HGVS_Node_system_r;
-        } // if
-        else
-        {
-            HGVS_Node* const probe = allele(&ptr);
-            if (is_error(probe))
+            node->left->data = *ptr;
+            ptr += 1;
+
+            if (!match_char(&ptr, '.'))
             {
-                return error(node, probe, *str, "while matching a reference");
+                return error(node, NULL, ptr, "expected: '.'");
             } // if
-            if (is_unmatched(probe))
-            {
-                return error(node, NULL, ptr, "expeced an allele");
-            } // if
-
-            node->right = probe;
-
-            *str = ptr;
-            return node;
-        } // else
-
-        if (!match_char(&ptr, '.'))
-        {
-            return error(node, NULL, ptr, "expected: '.'");
         } // if
 
         HGVS_Node* const probe = allele(&ptr);
@@ -881,7 +850,7 @@ reference(char const** const str, size_t const prefix)
             return error(node, NULL, ptr, "expeced an allele");
         } // if
 
-        node->right = probe;
+        node->left->left = probe;
 
         *str = ptr;
         return node;
@@ -993,17 +962,25 @@ static HGVS_Node*
 repeated(char const** const str)
 {
     char const* ptr = *str;
+    HGVS_Node* const node = create(HGVS_Node_repeat);
+    if (is_error_allocation(node))
+    {
+        return error_allocation(NULL);
+    } // if
+
     if (match_char(&ptr, '['))
     {
-        HGVS_Node* const node = number(&ptr);
+        HGVS_Node* const probe = number_or_unknown(&ptr);
         if (is_error(node))
         {
-            return error(NULL, node, *str, "while matching a repeated (exact)");
+            return error(node, probe, *str, "while matching a repeat (exact)");
         } // if
         if (is_unmatched(node))
         {
-            return error(NULL, NULL, ptr, "expected: number ']' ...");
+            return error(node, NULL, ptr, "expected: number ']' ... or '?' ] ...");
         } // if
+
+        node->left = probe;
 
         if (!match_char(&ptr, ']'))
         {
@@ -1014,53 +991,53 @@ repeated(char const** const str)
         return node;
     } // if
 
+    node->left = create(HGVS_Node_range_exact);
+    if (is_error_allocation(node->left))
+    {
+        return error_allocation(node);
+    } // if
+
     if (match_char(&ptr, '('))
     {
-        HGVS_Node* probe = number(&ptr);
+        HGVS_Node* probe = number_or_unknown(&ptr);
         if (is_error(probe))
         {
-            return error(NULL, probe, *str, "while matching a repeated (uncertain)");
+            return error(node, probe, *str, "while matching a repeat (uncertain)");
         } // if
         if (is_unmatched(probe))
         {
-            return error(NULL, NULL, ptr, "expected: number '_' number ')' ...");
+            return error(node, NULL, ptr, "expected: number '_' ... or '?_' ...");
         } // if
 
-        if (!match_char(&ptr, '_'))
+        node->left->left = probe;
+
+        if(!match_char(&ptr, '_'))
         {
-            return error(probe, NULL, ptr, "expected: '_'");
+            return error(node, NULL, ptr, "expected: '_'");
         } // if
 
-        HGVS_Node* const node = create(HGVS_Node_range_exact);
-        if (is_error_allocation(node))
-        {
-            return error_allocation(probe);
-        } // if
-
-        node->left = probe;
-
-        probe = number(&ptr);
+        probe = number_or_unknown(&ptr);
         if (is_error(probe))
         {
-            return error(NULL, probe, *str, "while matching a repeated (uncertain)");
+            return error(node, probe, *str, "while matching a repeat (uncertain)");
         } // if
         if (is_unmatched(probe))
         {
-            return error(NULL, NULL, ptr, "expected: number ')' ...");
+            return error(node, NULL, ptr, "expected: number '_' ... or '?_' ...");
         } // if
 
-        node->right = probe;
+        node->left->right = probe;
 
         if (!match_char(&ptr, ')'))
         {
-            return error(node, NULL, ptr, "expected: ')'");
+            return error(node, NULL, ptr, "expected: ']'");
         } // if
 
         *str = ptr;
         return node;
     } // if
 
-    return unmatched(NULL);
+    return unmatched(node);
 } // repeated
 
 
@@ -1365,23 +1342,15 @@ static HGVS_Node*
 repeat(char const** const str)
 {
     char const* ptr = *str;
-    HGVS_Node* const probe = repeated(&ptr);
-    if (is_error(probe))
+    HGVS_Node* const node = repeated(&ptr);
+    if (is_error(node))
     {
-        return error(NULL, probe, *str, "while matching a repeat");
+        return error(NULL, node, *str, "while matching a repeat");
     } // if
-    if (is_unmatched(probe))
+    if (is_unmatched(node))
     {
         return unmatched(NULL);
     } // if
-
-    HGVS_Node* const node = create(HGVS_Node_repeat);
-    if (is_error_allocation(node))
-    {
-        return error_allocation(NULL);
-    } // if
-
-    node->right = probe;
 
     *str = ptr;
     return node;
@@ -1663,7 +1632,7 @@ HGVS_parse(char const* const str)
 {
     char const* ptr = str;
 
-    if (isalpha(*ptr))
+    if (isalpha(*ptr) != 0)
     {
         HGVS_Node* const node = reference(&ptr, 0);
 
@@ -1690,8 +1659,10 @@ HGVS_parse(char const* const str)
 size_t
 HGVS_write(HGVS_Node const* const node)
 {
-    if (node != NULL)
+    if (!is_unmatched(node))
     {
+        HGVS_Node const* tmp = node;
+        size_t res = 0;
         switch (node->type)
         {
             case HGVS_Node_number:
@@ -1740,31 +1711,50 @@ HGVS_write(HGVS_Node const* const node)
                     return HGVS_write(node->left) + printf("inv") + HGVS_write(node->right);
                 } // if
                 return HGVS_write(node->left) + HGVS_write(node->right);
-
-            // case HGVS_Node_inserted_compound
-
+            case HGVS_Node_inserted_compound:
+                res = printf("[") + HGVS_write(node->left);
+                while (!is_unmatched(tmp))
+                {
+                    res += printf(";") + HGVS_write(tmp->left);
+                    tmp = tmp->right;
+                } // while
+                return res + printf("]");
             case HGVS_Node_insertion:
                 return printf("ins") + HGVS_write(node->left);
             case HGVS_Node_range_exact:
                 return printf("(") + HGVS_write(node->left) + printf("_") + HGVS_write(node->right) + printf(")");
             case HGVS_Node_conversion:
                 return printf("con") + HGVS_write(node->left);
-
-            // case HGVS_Node_repeat
-
+            case HGVS_Node_repeat:
+                if (!is_unmatched(node->left) && node->left->type == HGVS_Node_range_exact)
+                {
+                    return HGVS_write(node->left);
+                }
+                return printf("[") + HGVS_write(node->left) + printf("]");
             case HGVS_Node_equal:
                 return printf("=");
             case HGVS_Node_equal_allele:
                 return printf("=");
-
-            // case HGVS_Node_variant_list:
-
-            case HGVS_Node_reference:
-                if (node->left != NULL)
+            case HGVS_Node_variant_list:
+                res = printf("[") + HGVS_write(node->left);
+                while (!is_unmatched(tmp))
                 {
-                    return printf("%.*s", (int) node->data, node->ptr) + printf("(%.*s):", (int) node->left->data, node->left->ptr) + HGVS_write(node->right);
+                    res += printf(";") + HGVS_write(tmp->left);
+                    tmp = tmp->right;
+                } // while
+                return res + printf("]");
+            case HGVS_Node_reference:
+                if (!is_unmatched(node->right))
+                {
+                    return printf("%.*s", (int) node->data, node->ptr) + printf("(%.*s):", (int) node->right->data, node->right->ptr) + HGVS_write(node->right);
                 } // if
-                return printf("%.*s", (int) node->data, node->ptr) + printf(":") + HGVS_write(node->right);
+                return printf("%.*s", (int) node->data, node->ptr) + printf(":") + HGVS_write(node->left);
+            case HGVS_Node_coordinate_system:
+                if (isalpha(node->data) != 0)
+                {
+                    return printf("%c.", (char) node->data) + HGVS_write(node->left);
+                } // if
+                return HGVS_write(node->left);
 
             default:
                 return printf("*** not implemented (%u) ***", node->type);
