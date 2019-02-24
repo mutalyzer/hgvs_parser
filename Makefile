@@ -9,7 +9,7 @@ TARGET   = a.out
 
 CC       = gcc
 CFLAGS   = -march=native
-CPPFLAGS = $(addprefix -I, $(INC_DIR)) -std=c99 -Wall -Wextra -pedantic
+CPPFLAGS = $(addprefix -I, $(INC_DIR)) -std=c99 -Wall -Wextra -pedantic -DANSI
 
 .PHONY: all check clean debug release
 

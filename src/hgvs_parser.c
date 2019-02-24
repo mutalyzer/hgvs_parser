@@ -6,7 +6,7 @@
 
 
 #include "../include/hgvs_parser.h"
-#include "../include/interface.h"
+#include "../include/hgvs_interface.h"
 #include "../include/lexer.h"
 
 
@@ -1448,9 +1448,10 @@ allele(char const** const ptr)
 
 
 size_t
-print(FILE*             stream,
-      char const* const str,
-      Node const* const node)
+print(FILE*                  stream,
+      enum HGVS_Format const fmt,
+      char const* const      str,
+      Node const* const      node)
 {
     if (node != NULL)
     {
@@ -1459,155 +1460,148 @@ print(FILE*             stream,
         switch (node->type)
         {
             case NODE_ALLOCATION_ERROR:
-                return fprintf(stream, "%*s" ANSI_BOLDGREEN "^ " ANSI_BOLDMAGENTA "error: " ANSI_BOLDWHITE "%s\n" ANSI_RESET, (int) (node->ptr - str), "", node->ptr);
+                 return fprintf_error(stream, fmt, 0, node->ptr);
             case NODE_ERROR:
-                return print(stream, str, node->right) +
-                       fprintf(stream, "%*s" ANSI_BOLDGREEN "^ " ANSI_BOLDMAGENTA "error: " ANSI_BOLDWHITE "%s\n" ANSI_RESET, (int) (node->ptr - str), "", node->left->ptr);
+                 return print(stream, fmt, str, node->right) +
+                        fprintf_error(stream, fmt, node->ptr - str, node->left->ptr);
             case NODE_ERROR_CONTEXT:
                 return 0;
             case NODE_UNKNOWN:
-                return fprintf(stream, ANSI_CYAN "?" ANSI_RESET);
+                return fprintf_unknown(stream, fmt, '?');
             case NODE_NUMBER:
-                return fprintf(stream, ANSI_CYAN "%zu" ANSI_RESET, node->data);
+                return fprintf_number(stream, fmt, node->data);
             case NODE_SEQUENCE:
-                return fprintf(stream, ANSI_BOLDWHITE "%.*s" ANSI_RESET, (int) node->data, node->ptr);
             case NODE_IDENTIFIER:
-                return fprintf(stream, ANSI_BOLDWHITE "%.*s" ANSI_RESET, (int) node->data, node->ptr);
+                return fprintf_string(stream, fmt, node->ptr, node->data);
             case NODE_REFERENCE:
-                res = print(stream, str, node->left);
                 if (node->right != NULL)
                 {
-                    res += fprintf(stream, ANSI_MAGENTA "(" ANSI_RESET) +
-                           print(stream, str, node->right) +
-                           fprintf(stream, ANSI_MAGENTA ")" ANSI_RESET);
+                    return print(stream, fmt, str, node->left) +
+                           fprintf_operator(stream, fmt, '(') +
+                           print(stream, fmt, str, node->right) +
+                           fprintf_operator(stream, fmt, ')');
                 } // if
-                return res;
+                return print(stream, fmt, str, node->left);
             case NODE_DESCRIPTION:
-                res = print(stream, str, node->left) +
-                      fprintf(stream, ANSI_MAGENTA ":" ANSI_RESET);
                 if (node->data != 0)
                 {
-                    res += fprintf(stream, ANSI_BOLDWHITE "%c" ANSI_MAGENTA "." ANSI_RESET, (char) node->data);
+                    return print(stream, fmt, str, node->left) +
+                           fprintf_operator(stream, fmt, ':') +
+                           fprintf_char(stream, fmt, node->data) +
+                           fprintf_operator(stream, fmt, '.') +
+                           print(stream, fmt, str, node->right);
                 } // if
-                return res + print(stream, str, node->right);
+                return print(stream, fmt, str, node->left) +
+                       fprintf_operator(stream, fmt, ':') +
+                       print(stream, fmt, str, node->right);
             case NODE_OFFSET:
                 if (node->data == NODE_POSITIVE_OFFSET)
                 {
-                    return fprintf(stream, ANSI_MAGENTA "+" ANSI_RESET) +
-                           print(stream, str, node->left);
+                    return fprintf_operator(stream, fmt, '+') +
+                           print(stream, fmt, str, node->left);
                 } // if
-                return fprintf(stream, ANSI_MAGENTA "-" ANSI_RESET) +
-                       print(stream, str, node->left);
+                return fprintf_operator(stream, fmt, '-') +
+                       print(stream, fmt, str, node->left);
             case NODE_POINT:
                 if (node->data == NODE_DOWNSTREAM)
                 {
-                    return fprintf(stream, ANSI_MAGENTA "*" ANSI_RESET) +
-                           print(stream, str, node->left) +
-                           print(stream, str, node->right);
+                    return fprintf_operator(stream, fmt, '*') +
+                           print(stream, fmt, str, node->left) +
+                           print(stream, fmt, str, node->right);
                 } // if
                 if (node->data == NODE_UPSTREAM)
                 {
-                    return fprintf(stream, ANSI_MAGENTA "-" ANSI_RESET) +
-                           print(stream, str, node->left) +
-                           print(stream, str, node->right);
+                    return fprintf_operator(stream, fmt, '-') +
+                           print(stream, fmt, str, node->left) +
+                           print(stream, fmt, str, node->right);
                 } // if
-                return print(stream, str, node->left) + 
-                       print(stream, str, node->right);
+                return print(stream, fmt, str, node->left) +
+                       print(stream, fmt, str, node->right);
             case NODE_UNCERTAIN_POINT:
-                return fprintf(stream, ANSI_MAGENTA "(" ANSI_RESET) +
-                       print(stream, str, node->left) +
-                       fprintf(stream, ANSI_MAGENTA "_" ANSI_RESET) +
-                       print(stream, str, node->right) +
-                       fprintf(stream, ANSI_MAGENTA ")" ANSI_RESET);
+                return fprintf_operator(stream, fmt, '(') +
+                       print(stream, fmt, str, node->left) +
+                       fprintf_operator(stream,fmt, '_') +
+                       print(stream, fmt, str, node->right) +
+                       fprintf_operator(stream, fmt, ')');
             case NODE_RANGE:
-                return print(stream, str, node->left) +
-                       fprintf(stream, ANSI_MAGENTA "_" ANSI_RESET) +
-                       print(stream, str, node->right);
+                return print(stream, fmt, str, node->left) +
+                       fprintf_operator(stream, fmt, '_') +
+                       print(stream, fmt, str, node->right);
             case NODE_LENGTH:
-                return fprintf(stream, ANSI_MAGENTA "(") +
-                       print(stream, str, node->left) +
-                       fprintf(stream, ANSI_MAGENTA ")");
+                return fprintf_operator(stream, fmt, '(') +
+                       print(stream, fmt, str, node->left) +
+                       fprintf_operator(stream, fmt, ')');
             case NODE_INSERT:
-                res = print(stream, str, node->left);
+                res = print(stream, fmt, str, node->left);
                 if (node->data == NODE_INVERTED)
                 {
-                    res += fprintf(stream, ANSI_GREEN "inv" ANSI_RESET);
+                    res += fprintf_variant(stream, fmt, "inv");
                 } // if
                 if (node->right != NULL)
                 {
-                    res += fprintf(stream, ANSI_MAGENTA "[" ANSI_RESET) +
-                           print(stream, str, node->right) +
-                           fprintf(stream, ANSI_MAGENTA "]" ANSI_RESET);
+                    res += fprintf_operator(stream, fmt, ']') +
+                           print(stream, fmt, str, node->right) +
+                           fprintf_operator(stream, fmt, ']');
                 } // if
                 return res;
             case NODE_COMPOUND_INSERT:
-                res = fprintf(stream, ANSI_MAGENTA "[" ANSI_RESET) +
-                      print(stream, str, node->left);
+            case NODE_COMPOUND_VARIANT:
+                res = fprintf_operator(stream, fmt, '[') +
+                      print(stream, fmt, str, node->left);
                 tmp = node->right;
                 while (tmp != NULL)
                 {
-                    res += fprintf(stream, ANSI_MAGENTA ";") +
-                           print(stream, str, tmp->left);
+                    res += fprintf_operator(stream, fmt, ';') +
+                           print(stream, fmt, str, tmp->left);
                     tmp = tmp->right;
                 } // while
-                return res + fprintf(stream, ANSI_MAGENTA "]");
+                return res + fprintf_operator(stream, fmt, ']');
             case NODE_SUBSTITUTION:
-                return print(stream, str, node->left) +
-                       fprintf(stream, ANSI_GREEN ">" ANSI_RESET) +
-                       print(stream, str, node->right);
+                return print(stream, fmt, str, node->left) +
+                       fprintf_variant(stream, fmt, ">") +
+                       print(stream, fmt, str, node->right);
             case NODE_REPEAT:
-                return print(stream, str, node->left) +
-                       fprintf(stream, ANSI_MAGENTA "[" ANSI_RESET) +
-                       print(stream, str, node->right) + 
-                       fprintf(stream, ANSI_MAGENTA "]" ANSI_RESET);
+                return print(stream, fmt, str, node->left) +
+                       fprintf_operator(stream, fmt, '[') +
+                       print(stream, fmt, str, node->right) +
+                       fprintf_operator(stream, fmt, ']');
             case NODE_COMPOUND_REPEAT:
                 tmp = node;
                 res = 0;
                 while (tmp != NULL)
                 {
-                    res += print(stream, str, tmp->left);
+                    res += print(stream, fmt, str, tmp->left);
                     tmp = tmp->right;
                 } // while
                 return res;
             case NODE_DELETION:
-                return fprintf(stream, ANSI_GREEN "del") +
-                       print(stream, str, node->left);
+                return fprintf_variant(stream, fmt, "del") +
+                       print(stream, fmt, str, node->left);
             case NODE_DELETION_INSERTION:
-                return fprintf(stream, ANSI_GREEN "del" ANSI_RESET) +
-                       print(stream, str, node->left) +
-                       fprintf(stream, ANSI_GREEN "ins" ANSI_RESET) +
-                       print(stream, str, node->right);
+                return fprintf_variant(stream, fmt, "del") +
+                       print(stream, fmt, str, node->left) +
+                       fprintf_variant(stream, fmt, "ins") +
+                       print(stream, fmt, str, node->right);
             case NODE_INSERTION:
-                return fprintf(stream, ANSI_GREEN "ins" ANSI_RESET) +
-                       print(stream, str, node->left);
+                return fprintf_variant(stream, fmt, "ins") +
+                       print(stream, fmt, str, node->left);
             case NODE_DUPLICATION:
-                return fprintf(stream, ANSI_GREEN "dup" ANSI_RESET) +
-                       print(stream, str, node->left);
+                return fprintf_variant(stream, fmt, "dup") +
+                       print(stream, fmt, str, node->left);
             case NODE_CONVERSION:
-                return fprintf(stream, ANSI_GREEN "con" ANSI_RESET) +
-                       print(stream, str, node->left);
+                return fprintf_variant(stream, fmt, "con") +
+                       print(stream, fmt, str, node->left);
             case NODE_INVERSION:
-                return fprintf(stream, ANSI_GREEN "inv" ANSI_RESET) +
-                       print(stream, str, node->left);
+                return fprintf_variant(stream, fmt, "inv") +
+                       print(stream, fmt, str, node->left);
             case NODE_EQUAL:
-                return fprintf(stream, ANSI_GREEN "=" ANSI_RESET) +
-                       print(stream, str, node->left);
+                return fprintf_variant(stream, fmt, "=") +
+                       print(stream, fmt, str, node->left);
             case NODE_SLICE:
                 return 0;
             case NODE_VARIANT:
-                return print(stream, str, node->left) +
-                       print(stream, str, node->right);
-            case NODE_COMPOUND_VARIANT:
-                res = fprintf(stream, ANSI_MAGENTA "[" ANSI_RESET) +
-                      print(stream, str, node->left);
-                tmp = node->right;
-                while (tmp != NULL)
-                {
-                    res += fprintf(stream, ANSI_MAGENTA ";") +
-                           print(stream, str, tmp->left);
-                    tmp = tmp->right;
-                } // while
-                return res + fprintf(stream, ANSI_MAGENTA "]");
+                return print(stream, fmt, str, node->left) +
+                       print(stream, fmt, str, node->right);
         } // switch
     } // if
     return 0;
@@ -1625,18 +1619,18 @@ HGVS_parse(char const* const str)
         node = error(node, error(NULL, NULL, ptr, "unmatched input"), str, "while matching a description");
     } // if
 
-    fprintf(stderr, "%s\n", str);
-    print(stderr, str, node);
-    fprintf(stderr, "\n");
+    fprintf(stdout, "%s\n", str);
+    print(stdout, HGVS_Format_console, str, node);
+    fprintf(stdout, "\n");
 
     if (node == NULL || is_error(node))
     {
-        fprintf(stderr, ANSI_BOLDRED "failed.\n" ANSI_RESET);
+        fprintf_failed(stdout);
         destroy(node);
         return 1;
     } // if
 
-    fprintf(stderr, ANSI_BOLDGREEN "accepted.\n" ANSI_RESET);
+    fprintf_accept(stdout);
     destroy(node);
     return 0;
 } // HGVS_parse
