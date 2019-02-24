@@ -4,7 +4,6 @@ ref(000)
 ref:c.
 ref:
 ref:$
-ref:1
 ref:(1
 ref:(1_
 ref:(-
@@ -39,7 +38,6 @@ ref:1ins()
 ref:1ins(1
 ref:1ins[]
 ref:1ins[A
-ref:1ins[A[2]inv]
 ref:1ins[(1_1)inv
 ref:1ins[(1_1)inv[]
 ref:1ins[(1_1)inv()

@@ -14,15 +14,10 @@ main(int argc, char* argv[])
         return EXIT_FAILURE;
     } // if
 
-    HGVS_Node* root = HGVS_parse(argv[1]);
-    if (root == NULL)
+    if (HGVS_parse(argv[1]) != 0)
     {
-        fprintf(stderr, "failed.\n");
         return EXIT_FAILURE;
     } // if
 
-    HGVS_Node_destroy(root);
-
-    fprintf(stderr, "ok.\n");
     return EXIT_SUCCESS;
 } // main
