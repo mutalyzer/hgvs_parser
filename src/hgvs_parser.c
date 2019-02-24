@@ -490,7 +490,7 @@ description(char const** const ptr)
 
     if (!match_char(ptr, ':'))
     {
-        return error(node, NULL, *ptr, "expected: ':'");
+        return error(node, error(NULL, NULL, *ptr, "expected: ':'"), node->ptr, "while matching a description");
     } // if
 
     if (match_alpha(ptr, &node->data))
@@ -543,7 +543,7 @@ offset(char const** const ptr)
         Node* const probe = unknown_or_number(ptr);
         if (probe == NULL)
         {
-            return error(node, NULL, *ptr, "expected an unknown or number");
+            return error(node, NULL, *ptr, "expected an offset");
         } // if
         if (is_error(probe))
         {
@@ -583,14 +583,14 @@ point(char const** const ptr)
     } // if
     if (is_error(probe))
     {
-        return error(node, probe, node->ptr, "while matching a point");
+        return error(node, probe, node->ptr, "while matching an exact point");
     } // if
     node->left = probe;
 
     probe = offset(ptr);
     if (is_error(probe))
     {
-        return error(node, probe, node->ptr, "while matching a point");
+        return error(node, probe, node->ptr, "while matching an exact point");
     } // if
     node->right = probe;
 
@@ -613,7 +613,7 @@ uncertain_point(char const** const ptr)
         Node* probe = point(ptr);
         if (probe == NULL)
         {
-            return error(node, NULL, *ptr, "expected a point");
+            return error(node, error(NULL, NULL, *ptr, "expected an exact point (start)"), node->ptr, "while matching an uncertain point");
         } // if
         if (is_error(probe))
         {
@@ -623,13 +623,13 @@ uncertain_point(char const** const ptr)
 
         if (!match_char(ptr, '_'))
         {
-            return error(node, NULL, *ptr, "expected: '_'");
+            return error(node, error(NULL, NULL, *ptr, "expected: '_'"), node->ptr, "while matching an uncertain point");
         } // if
 
         probe = point(ptr);
         if (probe == NULL)
         {
-            return error(node, NULL, *ptr, "expected a point");
+            return error(node, error(NULL, NULL, *ptr, "expected an exact point (end)"), node->ptr, "while matching an uncertain point");
         } // if
         if (is_error(probe))
         {
@@ -639,7 +639,7 @@ uncertain_point(char const** const ptr)
 
         if (!match_char(ptr, ')'))
         {
-            return error(node, NULL, *ptr, "expected: ')'");
+            return error(node, error(NULL, NULL, *ptr, "expected: ')'"), node->ptr, "while matching an uncertain point");
         } // if
 
         return node;
@@ -655,7 +655,7 @@ uncertain_point_or_point(char const** const ptr)
     Node* node = uncertain_point(ptr);
     if (is_error(node))
     {
-        return error(NULL, node, err, "while matching an uncertain point");
+        return node;
     } // if
 
     if (node == NULL)
@@ -667,7 +667,7 @@ uncertain_point_or_point(char const** const ptr)
         } // if
         if (is_error(node))
         {
-            return error(NULL, node, err, "while matching a point");
+            return error(NULL, node, err, "while matching an exact point");
         } // if
     } // if
     return node;
@@ -700,11 +700,11 @@ location(char const** const ptr)
         probe = uncertain_point_or_point(ptr);
         if (probe == NULL)
         {
-            return error(node, NULL, *ptr, "expected a uncertain point or point");
+            return error(node, error(NULL, NULL, *ptr, "expected a point (exact or uncertain)"), err, "while matching a location (range)");
         } // if
         if (is_error(probe))
         {
-            return error(node, probe, err, "while matching a range");
+            return error(node, probe, err, "while matching a location (range)");
         } // if
         node->right = probe;
 
@@ -787,7 +787,7 @@ repeated(char const** const ptr)
     Node* const node = unknown_or_number_or_exact_range(ptr);
     if (node == NULL)
     {
-        return error(NULL, NULL, *ptr, "expected an unknown, number or exact range");
+        return error(NULL, NULL, *ptr, "a repeat number");
     } // if
     if (is_error(node))
     {
@@ -910,7 +910,7 @@ substitution_or_repeat(char const** const ptr)
         probe = sequence(ptr);
         if (probe == NULL)
         {
-            return error(node, NULL, *ptr, "expected a sequence");
+            return error(node, error(NULL, NULL, *ptr, "expected a sequence"), node->ptr, "while matching a substitution");
         } // if
         node->right = probe;
 
@@ -920,7 +920,7 @@ substitution_or_repeat(char const** const ptr)
     probe = repeated(ptr);
     if (probe == NULL)
     {
-        return error(node, NULL, *ptr, "expected a repeat number");
+        return error(node, NULL, *ptr, "expected a substitution or repeat number");
     } // if
     if (is_error(probe))
     {
@@ -969,7 +969,7 @@ length(char const** const ptr)
         Node* const probe = unknown_or_number_or_exact_range(ptr);
         if (probe == NULL)
         {
-            return error(node, NULL, *ptr, "expected unknown, number or exact range");
+            return error(node, NULL, *ptr, "expected a length");
         } // if
         if (is_error(probe))
         {
@@ -979,7 +979,7 @@ length(char const** const ptr)
 
         if (!match_char(ptr, ')'))
         {
-            return error(node, NULL, *ptr, "expected: ')'");
+            return error(node, error(NULL, NULL, *ptr, "expected: ')'"), node->ptr, "while matching a length");
         } // if
         return node;
     } // if
@@ -991,11 +991,10 @@ length(char const** const ptr)
 static Node*
 length_or_unknown_or_number(char const** const ptr)
 {
-    char const* const err = *ptr;
     Node* node = length(ptr);
     if (is_error(node))
     {
-        return error(NULL, node, err, "while matching a length, unknown or number");
+        return node;
     } // if
     if (node == NULL)
     {
@@ -1008,7 +1007,6 @@ length_or_unknown_or_number(char const** const ptr)
 static Node*
 sequence_or_length(char const** const ptr)
 {
-    char const* const err = *ptr;
     Node* node = sequence(ptr);
     if (node == NULL)
     {
@@ -1016,10 +1014,6 @@ sequence_or_length(char const** const ptr)
         if (node == NULL)
         {
             return unmatched(NULL);
-        } // if
-        if (is_error(node))
-        {
-            return error(NULL, node, err, "while matching a length, unknown or number");
         } // if
     } // if
     return node;
@@ -1128,7 +1122,7 @@ location_or_length(char const** const ptr)
     Node* probe = length(ptr);
     if (is_error(probe))
     {
-        return error(NULL, probe, err, "while matching a length, unknown or number");
+        return probe;
     } // if
 
     if (probe == NULL)
@@ -1156,7 +1150,7 @@ insert(char const** const ptr)
     Node* probe = sequence_or_description(ptr);
     if (is_error(probe))
     {
-        return error(node, probe, node->ptr, "while matching an insert");
+        return error(node, probe, node->ptr, "while matching an inserted part");
     } // if
 
     if (probe == NULL)
@@ -1164,11 +1158,11 @@ insert(char const** const ptr)
         probe = location_or_length(ptr);
         if (probe == NULL)
         {
-            return error(node, NULL, *ptr, "expected a sequence, description, location or length");
+            return error(node, NULL, *ptr, "expected an inserted part");
         } // if
         if (is_error(probe))
         {
-            return error(node, probe, node->ptr, "while matching an insert");
+            return error(node, probe, node->ptr, "while matching an inserted part");
         } // if
     } // if
     node->left = probe;
@@ -1182,7 +1176,7 @@ insert(char const** const ptr)
 
     if (is_error(probe))
     {
-        return error(node, probe, node->ptr, "while matching an insert");
+        return error(node, probe, node->ptr, "while matching an inserted part");
     } // if
     node->right = probe;
 
@@ -1205,16 +1199,16 @@ inserted(char const** const ptr)
         {
             return allocation_error(NULL);
         } // if
-        node->ptr = *ptr;
+        node->ptr = *ptr - 1;
 
         Node* probe = insert(ptr);
         if (probe == NULL)
         {
-            return error(node, NULL, *ptr, "expected an insert");
+            return error(node, error(NULL, NULL, *ptr, "expected an inserted part"), node->ptr, "while matching a compound insertion");
         } // if
         if (is_error(probe))
         {
-            return error(node, probe, node->ptr, "while matching a compound insert");
+            return error(node, probe, node->ptr, "while matching a compound insertion");
         } // if
         node->left = probe;
         node->data = 1;
@@ -1233,18 +1227,18 @@ inserted(char const** const ptr)
             probe = insert(ptr);
             if (probe == NULL)
             {
-                return error(node, NULL, *ptr, "expected an insert");
+                return error(node, error(NULL, NULL, *ptr, "expected an inserted part"), node->ptr, "while matching a compound insertion");
             } // if
             if (is_error(probe))
             {
-                return error(node, probe, node->ptr, "while matching a compound insert");
+                return error(node, probe, node->ptr, "while matching a compound insertion");
             } // if
             tmp->left = probe;
         } // while
 
         if (!match_char(ptr, ']'))
         {
-            return error(node, NULL, *ptr, "expected: ']'");
+            return error(node, error(NULL, NULL, *ptr, "expected: ']'"), node->ptr, "while matching a compound insertion");
         } // if
 
         return node;
@@ -1296,7 +1290,7 @@ deletion_or_deletion_insertion(char const** const ptr)
         Node* probe = sequence_or_length(ptr);
         if (is_error(probe))
         {
-            return error(node, probe, node->ptr, "while matching a deletion or deletion/insertion");
+            return error(node, probe, node->ptr, "while matching a deletion");
         } // if
         node->left = probe;
 
@@ -1448,7 +1442,7 @@ variant(char const** const ptr)
     Node* probe = location(ptr);
     if (probe == NULL)
     {
-        return error(node, NULL, *ptr, "expected a location");
+        return error(node, error(NULL, NULL, *ptr, "expected a location"), node->ptr, "while matching a variant");
     } // if
     if (is_error(probe))
     {
@@ -1580,7 +1574,6 @@ variant(char const** const ptr)
 static Node*
 allele(char const** const ptr)
 {
-    char const* const err = *ptr;
     if (match_char(ptr, '['))
     {
         Node* const node = create(NODE_COMPOUND_VARIANT);
@@ -1613,25 +1606,20 @@ allele(char const** const ptr)
             probe = variant(ptr);
             if (is_error(probe))
             {
-                return error(node, probe, node->ptr, "while matching a compound variant");
+                return error(node, probe, node->ptr, "while matching an allele");
             } // if
             tmp->left = probe;
         } // while
 
         if (!match_char(ptr, ']'))
         {
-            return error(node, NULL, *ptr, "expected: ']'");
+            return error(node, error(NULL, NULL, *ptr, "expected: ']'"), node->ptr, "while matching an allele");
         } // if
 
         return node;
     } // if
 
-    Node* const node = variant(ptr);
-    if (is_error(node))
-    {
-        return error(NULL, node, err, "while matching an allele");
-    } // if
-    return node;
+    return variant(ptr);
 } // allele
 
 
@@ -1810,7 +1798,7 @@ HGVS_parse(char const* const str)
     Node* node = description(&ptr);
     if (*ptr != '\0' && !is_error(node))
     {
-        node = error(node, NULL, ptr, "unmatched input");
+        node = error(node, error(NULL, NULL, ptr, "unmatched input"), str, "while matching a description");
     } // if
 
     fprintf(stderr, "%s\n", str);
