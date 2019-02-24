@@ -60,6 +60,7 @@ fprintf_operator(FILE*                  stream,
                                              op,
                                              is_tty(stream) ? ANSI_RESET : "");
     } // switch
+    return 0;
 } // switch
 
 
@@ -75,6 +76,7 @@ fprintf_variant(FILE*                  stream,
                                              tok,
                                              is_tty(stream) ? ANSI_RESET : "");
     } // switch
+    return 0;
 } // switch
 
 
@@ -90,6 +92,7 @@ fprintf_number(FILE*                  stream,
                                               num,
                                               is_tty(stream) ? ANSI_RESET : "");
     } // switch
+    return 0;
 } // switch
 
 
@@ -105,6 +108,7 @@ fprintf_unknown(FILE*                  stream,
                                              op,
                                              is_tty(stream) ? ANSI_RESET : "");
     } // switch
+    return 0;
 } // switch
 
 
@@ -122,6 +126,7 @@ fprintf_string(FILE*                  stream,
                                                ptr,
                                                is_tty(stream) ? ANSI_RESET : "");
     } // switch
+    return 0;
 } // switch
 
 
@@ -137,6 +142,7 @@ fprintf_char(FILE*                  stream,
                                              ch,
                                              is_tty(stream) ? ANSI_RESET : "");
     } // switch
+    return 0;
 } // switch
 
 
@@ -157,6 +163,7 @@ fprintf_error(FILE*                  stream,
                                                                msg,
                                                                is_tty(stream) ? ANSI_RESET : "");
     } // switch
+    return 0;
 } // fprintf_error
 
 
