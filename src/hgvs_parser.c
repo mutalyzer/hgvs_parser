@@ -1460,111 +1460,111 @@ print(FILE*                  stream,
         switch (node->type)
         {
             case NODE_ALLOCATION_ERROR:
-                 return fprintf_error(stream, fmt, 0, node->ptr);
+                 return HGVS_fprintf_error(stream, fmt, 0, node->ptr);
             case NODE_ERROR:
                  return print(stream, fmt, str, node->right) +
-                        fprintf_error(stream, fmt, node->ptr - str, node->left->ptr);
+                        HGVS_fprintf_error(stream, fmt, node->ptr - str, node->left->ptr);
             case NODE_ERROR_CONTEXT:
                 return 0;
             case NODE_UNKNOWN:
-                return fprintf_unknown(stream, fmt, '?');
+                return HGVS_fprintf_unknown(stream, fmt, '?');
             case NODE_NUMBER:
-                return fprintf_number(stream, fmt, node->data);
+                return HGVS_fprintf_number(stream, fmt, node->data);
             case NODE_SEQUENCE:
             case NODE_IDENTIFIER:
-                return fprintf_string(stream, fmt, node->ptr, node->data);
+                return HGVS_fprintf_string(stream, fmt, node->ptr, node->data);
             case NODE_REFERENCE:
                 if (node->right != NULL)
                 {
                     return print(stream, fmt, str, node->left) +
-                           fprintf_operator(stream, fmt, '(') +
+                           HGVS_fprintf_operator(stream, fmt, '(') +
                            print(stream, fmt, str, node->right) +
-                           fprintf_operator(stream, fmt, ')');
+                           HGVS_fprintf_operator(stream, fmt, ')');
                 } // if
                 return print(stream, fmt, str, node->left);
             case NODE_DESCRIPTION:
                 if (node->data != 0)
                 {
                     return print(stream, fmt, str, node->left) +
-                           fprintf_operator(stream, fmt, ':') +
-                           fprintf_char(stream, fmt, node->data) +
-                           fprintf_operator(stream, fmt, '.') +
+                           HGVS_fprintf_operator(stream, fmt, ':') +
+                           HGVS_fprintf_char(stream, fmt, node->data) +
+                           HGVS_fprintf_operator(stream, fmt, '.') +
                            print(stream, fmt, str, node->right);
                 } // if
                 return print(stream, fmt, str, node->left) +
-                       fprintf_operator(stream, fmt, ':') +
+                       HGVS_fprintf_operator(stream, fmt, ':') +
                        print(stream, fmt, str, node->right);
             case NODE_OFFSET:
                 if (node->data == NODE_POSITIVE_OFFSET)
                 {
-                    return fprintf_operator(stream, fmt, '+') +
+                    return HGVS_fprintf_operator(stream, fmt, '+') +
                            print(stream, fmt, str, node->left);
                 } // if
-                return fprintf_operator(stream, fmt, '-') +
+                return HGVS_fprintf_operator(stream, fmt, '-') +
                        print(stream, fmt, str, node->left);
             case NODE_POINT:
                 if (node->data == NODE_DOWNSTREAM)
                 {
-                    return fprintf_operator(stream, fmt, '*') +
+                    return HGVS_fprintf_operator(stream, fmt, '*') +
                            print(stream, fmt, str, node->left) +
                            print(stream, fmt, str, node->right);
                 } // if
                 if (node->data == NODE_UPSTREAM)
                 {
-                    return fprintf_operator(stream, fmt, '-') +
+                    return HGVS_fprintf_operator(stream, fmt, '-') +
                            print(stream, fmt, str, node->left) +
                            print(stream, fmt, str, node->right);
                 } // if
                 return print(stream, fmt, str, node->left) +
                        print(stream, fmt, str, node->right);
             case NODE_UNCERTAIN_POINT:
-                return fprintf_operator(stream, fmt, '(') +
+                return HGVS_fprintf_operator(stream, fmt, '(') +
                        print(stream, fmt, str, node->left) +
-                       fprintf_operator(stream,fmt, '_') +
+                       HGVS_fprintf_operator(stream,fmt, '_') +
                        print(stream, fmt, str, node->right) +
-                       fprintf_operator(stream, fmt, ')');
+                       HGVS_fprintf_operator(stream, fmt, ')');
             case NODE_RANGE:
                 return print(stream, fmt, str, node->left) +
-                       fprintf_operator(stream, fmt, '_') +
+                       HGVS_fprintf_operator(stream, fmt, '_') +
                        print(stream, fmt, str, node->right);
             case NODE_LENGTH:
-                return fprintf_operator(stream, fmt, '(') +
+                return HGVS_fprintf_operator(stream, fmt, '(') +
                        print(stream, fmt, str, node->left) +
-                       fprintf_operator(stream, fmt, ')');
+                       HGVS_fprintf_operator(stream, fmt, ')');
             case NODE_INSERT:
                 res = print(stream, fmt, str, node->left);
                 if (node->data == NODE_INVERTED)
                 {
-                    res += fprintf_variant(stream, fmt, "inv");
+                    res += HGVS_fprintf_variant(stream, fmt, "inv");
                 } // if
                 if (node->right != NULL)
                 {
-                    res += fprintf_operator(stream, fmt, ']') +
+                    res += HGVS_fprintf_operator(stream, fmt, ']') +
                            print(stream, fmt, str, node->right) +
-                           fprintf_operator(stream, fmt, ']');
+                           HGVS_fprintf_operator(stream, fmt, ']');
                 } // if
                 return res;
             case NODE_COMPOUND_INSERT:
             case NODE_COMPOUND_VARIANT:
-                res = fprintf_operator(stream, fmt, '[') +
+                res = HGVS_fprintf_operator(stream, fmt, '[') +
                       print(stream, fmt, str, node->left);
                 tmp = node->right;
                 while (tmp != NULL)
                 {
-                    res += fprintf_operator(stream, fmt, ';') +
+                    res += HGVS_fprintf_operator(stream, fmt, ';') +
                            print(stream, fmt, str, tmp->left);
                     tmp = tmp->right;
                 } // while
-                return res + fprintf_operator(stream, fmt, ']');
+                return res + HGVS_fprintf_operator(stream, fmt, ']');
             case NODE_SUBSTITUTION:
                 return print(stream, fmt, str, node->left) +
-                       fprintf_variant(stream, fmt, ">") +
+                       HGVS_fprintf_variant(stream, fmt, ">") +
                        print(stream, fmt, str, node->right);
             case NODE_REPEAT:
                 return print(stream, fmt, str, node->left) +
-                       fprintf_operator(stream, fmt, '[') +
+                       HGVS_fprintf_operator(stream, fmt, '[') +
                        print(stream, fmt, str, node->right) +
-                       fprintf_operator(stream, fmt, ']');
+                       HGVS_fprintf_operator(stream, fmt, ']');
             case NODE_COMPOUND_REPEAT:
                 tmp = node;
                 res = 0;
@@ -1575,27 +1575,27 @@ print(FILE*                  stream,
                 } // while
                 return res;
             case NODE_DELETION:
-                return fprintf_variant(stream, fmt, "del") +
+                return HGVS_fprintf_variant(stream, fmt, "del") +
                        print(stream, fmt, str, node->left);
             case NODE_DELETION_INSERTION:
-                return fprintf_variant(stream, fmt, "del") +
+                return HGVS_fprintf_variant(stream, fmt, "del") +
                        print(stream, fmt, str, node->left) +
-                       fprintf_variant(stream, fmt, "ins") +
+                       HGVS_fprintf_variant(stream, fmt, "ins") +
                        print(stream, fmt, str, node->right);
             case NODE_INSERTION:
-                return fprintf_variant(stream, fmt, "ins") +
+                return HGVS_fprintf_variant(stream, fmt, "ins") +
                        print(stream, fmt, str, node->left);
             case NODE_DUPLICATION:
-                return fprintf_variant(stream, fmt, "dup") +
+                return HGVS_fprintf_variant(stream, fmt, "dup") +
                        print(stream, fmt, str, node->left);
             case NODE_CONVERSION:
-                return fprintf_variant(stream, fmt, "con") +
+                return HGVS_fprintf_variant(stream, fmt, "con") +
                        print(stream, fmt, str, node->left);
             case NODE_INVERSION:
-                return fprintf_variant(stream, fmt, "inv") +
+                return HGVS_fprintf_variant(stream, fmt, "inv") +
                        print(stream, fmt, str, node->left);
             case NODE_EQUAL:
-                return fprintf_variant(stream, fmt, "=") +
+                return HGVS_fprintf_variant(stream, fmt, "=") +
                        print(stream, fmt, str, node->left);
             case NODE_SLICE:
                 return 0;
@@ -1625,12 +1625,12 @@ HGVS_parse(char const* const str)
 
     if (node == NULL || is_error(node))
     {
-        fprintf_failed(stdout);
+        HGVS_fprintf_failed(stdout);
         destroy(node);
         return 1;
     } // if
 
-    fprintf_accept(stdout);
+    HGVS_fprintf_accept(stdout);
     destroy(node);
     return 0;
 } // HGVS_parse
