@@ -1146,7 +1146,15 @@ deletion_or_deletion_insertion(char const** const ptr)
 
     if (match_string(ptr, "del"))
     {
-        Node* probe = sequence_or_length(ptr);
+        Node* probe = NULL;
+        if (**ptr == '[')
+        {
+            probe = inserted(ptr);
+        } // if
+        else
+        {
+            probe = sequence_or_length(ptr);
+        } // else
         if (is_error(probe))
         {
             return error(node, probe, node->ptr, "while matching a deletion");
