@@ -1460,6 +1460,12 @@ allele(char const** const ptr)
         } // if
         node->ptr = *ptr - 1;
 
+        if (match_char(ptr, '='))
+        {
+            node->type = NODE_EQUAL;
+            return node;
+        } // if
+
         Node* probe = variant(ptr);
         if (is_error(probe))
         {
@@ -1492,6 +1498,18 @@ allele(char const** const ptr)
         {
             return error(node, error(NULL, NULL, *ptr, "expected: ']'"), node->ptr, "while matching an allele");
         } // if
+
+        return node;
+    } // if
+
+    if (match_char(ptr, '='))
+    {
+        Node* const node = create(NODE_EQUAL);
+        if (node == &ALLOCATION_ERROR)
+        {
+            return allocation_error(NULL);
+        } // if
+        node->ptr = *ptr;
 
         return node;
     } // if
