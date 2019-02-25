@@ -4,4 +4,4 @@ pipelines:
   default:
     - step:
         script:
-          - make check
+          - make check OPTIONS='ANSI'
