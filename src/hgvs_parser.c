@@ -908,6 +908,7 @@ sequence_or_description(char const** const ptr)
             return error(node, NULL, *ptr, "expected: ':'");
         } // if
 
+        node->data = 0;
         if (match_alpha(ptr, &node->data))
         {
             if (!match_char(ptr, '.'))
@@ -982,7 +983,7 @@ insert(char const** const ptr)
         probe = location_or_length(ptr);
         if (probe == NULL)
         {
-            return error(node, NULL, *ptr, "expected an inserted part");
+            return unmatched(node);
         } // if
         if (is_error(probe))
         {
@@ -1073,6 +1074,36 @@ inserted(char const** const ptr)
 
 
 static Node*
+substitution(char const** const ptr)
+{
+    Node* const node = create(NODE_SUBSTITUTION);
+    if (node == &ALLOCATION_ERROR)
+    {
+        return allocation_error(NULL);
+    } // if
+    node->ptr = *ptr;
+
+    if (match_char(ptr, '>'))
+    {
+        Node* const probe = inserted(ptr);
+        if (probe == NULL)
+        {
+            return error(node, NULL, *ptr, "expected an inserted part");
+        } // if
+        if (is_error(probe))
+        {
+            return error(node, probe, node->ptr, "while matching a substitution");
+        } // if
+        node->right = probe;
+
+        return node;
+    } // if
+
+    return unmatched(node);
+} // substitution
+
+
+static Node*
 insertion(char const** const ptr)
 {
     Node* const node = create(NODE_INSERTION);
@@ -1085,6 +1116,10 @@ insertion(char const** const ptr)
     if (match_string(ptr, "ins"))
     {
         Node* const probe = inserted(ptr);
+        if (probe == NULL)
+        {
+            return error(node, NULL, *ptr, "expected an inserted part");
+        } // if
         if (is_error(probe))
         {
             return error(node, probe, node->ptr, "while matching an insertion");
@@ -1123,6 +1158,10 @@ deletion_or_deletion_insertion(char const** const ptr)
             node->type = NODE_DELETION_INSERTION;
 
             probe = inserted(ptr);
+            if (probe == NULL)
+            {
+                return error(node, NULL, *ptr, "expected an inserted part");
+            } // if
             if (is_error(probe))
             {
                 return error(node, probe, node->ptr, "while matching a deletion/insertion");
@@ -1150,7 +1189,7 @@ duplication(char const** const ptr)
 
     if (match_string(ptr, "dup"))
     {
-        Node* const probe = sequence_or_length(ptr);
+        Node* const probe = inserted(ptr);
         if (is_error(probe))
         {
             return error(node, probe, node->ptr, "while matching an duplication");
@@ -1177,16 +1216,11 @@ conversion(char const** const ptr)
 
     if (match_string(ptr, "con"))
     {
-        Node* probe = location(ptr);
+        Node* probe = inserted(ptr);
         if (probe == NULL)
         {
-            probe = description(ptr);
-            if (probe == NULL)
-            {
-                return error(node, NULL, *ptr, "expected a location or description");
-            } // if
+            return error(node, NULL, *ptr, "expected an inserted part");
         } // if
-
         if (is_error(probe))
         {
             return error(node, probe, node->ptr, "while matching an conversion");
@@ -1211,7 +1245,7 @@ inversion(char const** const ptr)
 
     if (match_string(ptr, "inv"))
     {
-        Node* const probe = sequence_or_length(ptr);
+        Node* const probe = inserted(ptr);
         if (is_error(probe))
         {
             return error(node, probe, node->ptr, "while matching an inversion");
@@ -1238,7 +1272,7 @@ equal(char const** const ptr)
 
     if (match_char(ptr, '='))
     {
-        Node* const probe = sequence_or_length(ptr);
+        Node* const probe = inserted(ptr);
         if (is_error(probe))
         {
             return error(node, probe, node->ptr, "while matching an equal");
@@ -1275,6 +1309,17 @@ variant(char const** const ptr)
     node->left = probe;
 
     probe = substitution_or_repeat(ptr);
+    if (is_error(probe))
+    {
+        return error(node, probe, node->ptr, "while matching a variant");
+    } // if
+    if (probe != NULL)
+    {
+        node->right = probe;
+        return node;
+    } // if
+
+    probe = substitution(ptr);
     if (is_error(probe))
     {
         return error(node, probe, node->ptr, "while matching a variant");
