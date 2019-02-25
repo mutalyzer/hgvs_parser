@@ -1,4 +1,4 @@
-image: gcc-expect-valgrind
+image: etews/gcc-expect-valgrind
 
 pipelines:
   default:
