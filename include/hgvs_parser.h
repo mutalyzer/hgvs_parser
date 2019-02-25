@@ -1,5 +1,5 @@
-#if !defined(__hgvs_parser_h__)
-#define __hgvs_parser_h__
+#if !defined(HGVS_PARSER_H)
+#define HGVS_PARSER_H
 
 
 int

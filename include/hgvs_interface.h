@@ -1,5 +1,5 @@
-#if !defined(__hgvs_interface_h__)
-#define __hgvs_interface_h__
+#if !defined(HGVS_INTERFACE_H)
+#define HGVS_INTERFACE_H
 
 
 #include <stddef.h>

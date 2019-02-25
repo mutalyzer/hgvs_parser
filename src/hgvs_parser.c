@@ -1586,15 +1586,15 @@ print(FILE*                  stream,
                        HGVS_fprintf_operator(stream, fmt, ')');
             case NODE_INSERT:
                 res = print(stream, fmt, str, node->left);
+                if (node->right != NULL)
+                {
+                    res += HGVS_fprintf_operator(stream, fmt, '[') +
+                           print(stream, fmt, str, node->right) +
+                           HGVS_fprintf_operator(stream, fmt, ']');
+                } // if
                 if (node->data == NODE_INVERTED)
                 {
                     res += HGVS_fprintf_variant(stream, fmt, "inv");
-                } // if
-                if (node->right != NULL)
-                {
-                    res += HGVS_fprintf_operator(stream, fmt, ']') +
-                           print(stream, fmt, str, node->right) +
-                           HGVS_fprintf_operator(stream, fmt, ']');
                 } // if
                 return res;
             case NODE_COMPOUND_INSERT:

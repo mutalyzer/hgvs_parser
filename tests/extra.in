@@ -1,0 +1,5 @@
+REF:[4]                                     compound allele description containing one variant: a slice of length 1 at position 4.
+REF:1del[AAA;A[3]inv]insGGG[4]inv
+REF:10>[REF:g.(4_6)]
+REF:c.4conREF:g.[3;4;5;6;(5_5)_?con[3456_09209]]
+REF(A(B(C))):3

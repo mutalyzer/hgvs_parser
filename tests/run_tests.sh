@@ -13,8 +13,9 @@ done
 FAIL=0;
 
 while IFS= read -r line; do
-    echo "HGVS variant description: ${line}"
-    ${MEM_CHECK} ./a.out "$line"
+    cols=( ${line})
+    echo "HGVS variant description: ${cols[0]}"
+    ${MEM_CHECK} ./a.out "${cols[0]}"
     ret=$?
     if [ ${ret} -ne ${EXIT_CODE} ]; then
         FAIL=1

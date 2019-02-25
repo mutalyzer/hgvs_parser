@@ -1,5 +1,5 @@
-#if !defined(__hgvs_lexer_h__)
-#define __hgvs_lexer_h__
+#if !defined(HGVS_LEXER_H)
+#define HGVS_LEXER_H
 
 
 #include <stdbool.h>
