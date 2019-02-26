@@ -1317,17 +1317,6 @@ variant(char const** const ptr)
     } // if
     node->left = probe;
 
-    probe = substitution_or_repeat(ptr);
-    if (is_error(probe))
-    {
-        return error(node, probe, node->ptr, "while matching a variant");
-    } // if
-    if (probe != NULL)
-    {
-        node->right = probe;
-        return node;
-    } // if
-
     probe = substitution(ptr);
     if (is_error(probe))
     {
@@ -1395,6 +1384,17 @@ variant(char const** const ptr)
     } // if
 
     probe = equal(ptr);
+    if (is_error(probe))
+    {
+        return error(node, probe, node->ptr, "while matching a variant");
+    } // if
+    if (probe != NULL)
+    {
+        node->right = probe;
+        return node;
+    } // if
+
+    probe = substitution_or_repeat(ptr);
     if (is_error(probe))
     {
         return error(node, probe, node->ptr, "while matching a variant");
