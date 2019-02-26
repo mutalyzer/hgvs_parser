@@ -43,13 +43,17 @@ is_decimal_digit(char const ch)
 
 
 static inline bool
-is_IUPAC_DNA(char const ch)
+is_IUPAC_NT(char const ch)
 {
     return ch == 'A' || ch == 'C' || ch == 'G' || ch == 'T' ||
            ch == 'R' || ch == 'Y' || ch == 'S' || ch == 'W' ||
            ch == 'K' || ch == 'M' || ch == 'B' || ch == 'D' ||
-           ch == 'H' || ch == 'V' || ch == 'N';
-} // is_IUPAC_DNA
+           ch == 'H' || ch == 'V' || ch == 'N' || ch == 'U' ||
+           ch == 'a' || ch == 'c' || ch == 'g' || ch == 't' ||
+           ch == 'r' || ch == 'y' || ch == 's' || ch == 'w' ||
+           ch == 'k' || ch == 'm' || ch == 'b' || ch == 'd' ||
+           ch == 'h' || ch == 'v' || ch == 'n' || ch == 'u';
+} // is_IUPAC_NT
 
 
 static inline bool
@@ -132,7 +136,7 @@ match_sequence(char const** const ptr, size_t* len)
 {
     *len = 0;
     bool matched = false;
-    while (is_IUPAC_DNA(**ptr))
+    while (is_IUPAC_NT(**ptr))
     {
         matched = true;
         *ptr += 1;
