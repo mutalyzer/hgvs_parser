@@ -65,11 +65,11 @@ HGVS_fprintf_operator(FILE*                  stream,
             break;
     } // switch
     return fprintf(stream, "%c", op);
-} // switch
+} // HGVS_fprintf_operator
 
 
 static inline size_t
-HGVS_fprintf_variant(FILE*                  stream,
+HGVS_fprintf_keyword(FILE*                  stream,
                      enum HGVS_Format const fmt,
                      char const* const      tok)
 {
@@ -84,7 +84,7 @@ HGVS_fprintf_variant(FILE*                  stream,
             break;
     } // switch
     return fprintf(stream, "%s", tok);
-} // switch
+} // HGVS_fprintf_keyword
 
 
 static inline size_t
@@ -103,26 +103,7 @@ HGVS_fprintf_number(FILE*                  stream,
             break;
     } // switch
     return fprintf(stream, "%zu", num);
-} // switch
-
-
-static inline size_t
-HGVS_fprintf_unknown(FILE*                  stream,
-                     enum HGVS_Format const fmt,
-                     char const             op)
-{
-    switch (fmt)
-    {
-        case HGVS_Format_console:
-            return fprintf(stream, "%s%c%s",
-                           HGVS_is_tty(stream) ? HGVS_ANSI_CYAN : "",
-                           op,
-                           HGVS_is_tty(stream) ? HGVS_ANSI_RESET : "");
-        default:
-            break;
-    } // switch
-    return fprintf(stream, "%c", op);
-} // switch
+} // HGVS_fprintf_number
 
 
 static inline size_t
@@ -143,7 +124,7 @@ HGVS_fprintf_string(FILE*                  stream,
             break;
     } // switch
     return fprintf(stream, "%.*s", len, ptr);
-} // switch
+} // HGVS_fprintf_string
 
 
 static inline size_t
@@ -162,7 +143,7 @@ HGVS_fprintf_char(FILE*                  stream,
             break;
     } // switch
     return fprintf(stream, "%c", ch);
-} // switch
+} // HGVS_fprintf_char
 
 
 static inline size_t

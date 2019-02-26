@@ -908,7 +908,6 @@ sequence_or_description(char const** const ptr)
             return error(node, NULL, *ptr, "expected: ':'");
         } // if
 
-        node->data = 0;
         if (match_alpha(ptr, &node->data))
         {
             if (!match_char(ptr, '.'))
@@ -1538,7 +1537,7 @@ print(FILE*                  stream,
             case NODE_ERROR_CONTEXT:
                 return 0;
             case NODE_UNKNOWN:
-                return HGVS_fprintf_unknown(stream, fmt, '?');
+                return HGVS_fprintf_operator(stream, fmt, '?');
             case NODE_NUMBER:
                 return HGVS_fprintf_number(stream, fmt, node->data);
             case NODE_SEQUENCE:
@@ -1612,7 +1611,7 @@ print(FILE*                  stream,
                 } // if
                 if (node->data == NODE_INVERTED)
                 {
-                    res += HGVS_fprintf_variant(stream, fmt, "inv");
+                    res += HGVS_fprintf_keyword(stream, fmt, "inv");
                 } // if
                 return res;
             case NODE_COMPOUND_INSERT:
@@ -1629,7 +1628,7 @@ print(FILE*                  stream,
                 return res + HGVS_fprintf_operator(stream, fmt, ']');
             case NODE_SUBSTITUTION:
                 return print(stream, fmt, str, node->left) +
-                       HGVS_fprintf_variant(stream, fmt, ">") +
+                       HGVS_fprintf_keyword(stream, fmt, ">") +
                        print(stream, fmt, str, node->right);
             case NODE_REPEAT:
                 return print(stream, fmt, str, node->left) +
@@ -1646,27 +1645,27 @@ print(FILE*                  stream,
                 } // while
                 return res;
             case NODE_DELETION:
-                return HGVS_fprintf_variant(stream, fmt, "del") +
+                return HGVS_fprintf_keyword(stream, fmt, "del") +
                        print(stream, fmt, str, node->left);
             case NODE_DELETION_INSERTION:
-                return HGVS_fprintf_variant(stream, fmt, "del") +
+                return HGVS_fprintf_keyword(stream, fmt, "del") +
                        print(stream, fmt, str, node->left) +
-                       HGVS_fprintf_variant(stream, fmt, "ins") +
+                       HGVS_fprintf_keyword(stream, fmt, "ins") +
                        print(stream, fmt, str, node->right);
             case NODE_INSERTION:
-                return HGVS_fprintf_variant(stream, fmt, "ins") +
+                return HGVS_fprintf_keyword(stream, fmt, "ins") +
                        print(stream, fmt, str, node->left);
             case NODE_DUPLICATION:
-                return HGVS_fprintf_variant(stream, fmt, "dup") +
+                return HGVS_fprintf_keyword(stream, fmt, "dup") +
                        print(stream, fmt, str, node->left);
             case NODE_CONVERSION:
-                return HGVS_fprintf_variant(stream, fmt, "con") +
+                return HGVS_fprintf_keyword(stream, fmt, "con") +
                        print(stream, fmt, str, node->left);
             case NODE_INVERSION:
-                return HGVS_fprintf_variant(stream, fmt, "inv") +
+                return HGVS_fprintf_keyword(stream, fmt, "inv") +
                        print(stream, fmt, str, node->left);
             case NODE_EQUAL:
-                return HGVS_fprintf_variant(stream, fmt, "=") +
+                return HGVS_fprintf_keyword(stream, fmt, "=") +
                        print(stream, fmt, str, node->left);
             case NODE_SLICE:
                 return 0;
