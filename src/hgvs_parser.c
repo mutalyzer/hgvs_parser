@@ -317,6 +317,7 @@ description(char const** const ptr)
         return error(node, error(NULL, NULL, *ptr, "expected: ':'"), node->ptr, "while matching a description");
     } // if
 
+    node->data = 0;
     if (match_alpha(ptr, &node->data))
     {
         if (!match_char(ptr, '.'))
@@ -908,6 +909,7 @@ sequence_or_description(char const** const ptr)
             return error(node, NULL, *ptr, "expected: ':'");
         } // if
 
+        node->data = 0;
         if (match_alpha(ptr, &node->data))
         {
             if (!match_char(ptr, '.'))
