@@ -1,5 +1,11 @@
-#if !defined(HGVS_LEXER_H)
+#ifndef HGVS_LEXER_H
 #define HGVS_LEXER_H
+
+
+/*
+WARNING: this file is *not* to be included directly as it pollutes the
+         global namespace
+*/
 
 
 #include <stdbool.h>

@@ -81,7 +81,7 @@ is_error(Node* const node)
 static inline void
 destroy(Node* const node)
 {
-    if (node != NULL)
+    if (node != NULL && node != &ALLOCATION_ERROR)
     {
         destroy(node->left);
         destroy(node->right);

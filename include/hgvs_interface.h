@@ -1,4 +1,4 @@
-#if !defined(HGVS_INTERFACE_H)
+#ifndef HGVS_INTERFACE_H
 #define HGVS_INTERFACE_H
 
 

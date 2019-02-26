@@ -2,12 +2,13 @@
 #include <stdlib.h>
 
 
-#include "../include/hgvs_parser.h"
+#include "../include/hgvs.h"
 
 
 int
 main(int argc, char* argv[])
 {
+    fprintf(stderr, "HGVS parser " HGVS_VERSION_STRING "\n");
     if (argc <= 1)
     {
         fprintf(stderr, "Usage: %s string\n", argv[0]);

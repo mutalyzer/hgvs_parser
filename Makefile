@@ -16,7 +16,7 @@ CPPFLAGS = $(addprefix -I, $(INC_DIR))
 debug: CFLAGS += -O0 -ggdb3 -DDEBUG
 debug: all
 
-release: CFLAGS += -O3 -fomit-frame-pointer -funroll-loops -DNDEBUG
+release: CFLAGS += -O3 -fomit-frame-pointer -funroll-loops -DNDEBUG -DRELEASE
 release: all
 
 all: $(TARGET)

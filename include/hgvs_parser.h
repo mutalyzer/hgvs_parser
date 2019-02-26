@@ -1,4 +1,4 @@
-#if !defined(HGVS_PARSER_H)
+#ifndef HGVS_PARSER_H
 #define HGVS_PARSER_H
 
 
