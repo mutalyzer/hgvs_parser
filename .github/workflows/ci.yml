@@ -1,21 +1,12 @@
 name: ci
 on: [push]
 jobs:
-    setup:
+    tests:
         runs-on: ubuntu-latest
         steps:
             - run: sudo apt update
             - run: sudo apt install -y valgrind
-    build:
-        needs: setup
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v3
             - run: gcc --version
-            - run: make OPTIONS=ANSI
-    tests:
-        needs: build
-        runs-on: ubuntu-latest
-        steps:
             - run: valgrind --version
-            - run: make check
+            - uses: actions/checkout@v3
+            - run: make OPTIONS=ANSI check
