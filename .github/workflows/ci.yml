@@ -4,17 +4,17 @@ jobs:
     setup:
         runs-on: ubuntu-latest
         steps:
-            - run apt update
-            - run apt install valgrind
+            - run: apt update
+            - run: apt install valgrind
     build:
         needs: setup
         runs-on: ubuntu-latest
         steps:
-            - run gcc --version
-            - run make OPTIONS=ANSI
+            - run: gcc --version
+            - run: make OPTIONS=ANSI
     tests:
         needs: build
         runs-on: ubuntu-latest
         steps:
-            - run valgrind --version
-            - run make check
+            - run: valgrind --version
+            - run: make check
