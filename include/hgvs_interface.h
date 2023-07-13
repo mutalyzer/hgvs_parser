@@ -33,7 +33,7 @@ enum HGVS_Format
 {
     HGVS_Format_plain,
     HGVS_Format_console,
-} HGVS_Format;
+};
 
 
 static inline int
