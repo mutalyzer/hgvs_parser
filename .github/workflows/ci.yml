@@ -10,6 +10,7 @@ jobs:
         needs: setup
         runs-on: ubuntu-latest
         steps:
+            - uses: actions/checkout@v3
             - run: gcc --version
             - run: make OPTIONS=ANSI
     tests:
