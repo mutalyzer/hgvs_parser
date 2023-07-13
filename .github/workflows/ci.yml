@@ -4,8 +4,8 @@ jobs:
     setup:
         runs-on: ubuntu-latest
         steps:
-            - run: apt update
-            - run: apt install valgrind
+            - run: sudo apt update
+            - run: sudo apt install -y valgrind
     build:
         needs: setup
         runs-on: ubuntu-latest
