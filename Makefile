@@ -1,4 +1,3 @@
-INC_DIR = include
 SRC_DIR = src
 
 SOURCES  = $(sort $(shell find $(SRC_DIR) -name '*.c'))
@@ -8,15 +7,14 @@ DEPS     = $(OBJECTS:.o=.d)
 TARGET   = a.out
 
 CC       = gcc
-CFLAGS   = -std=c99 -march=native -Wall -Wextra -pedantic $(addprefix -D, $(OPTIONS))
-CPPFLAGS = $(addprefix -I, $(INC_DIR))
+CFLAGS   = -std=c99 -march=native -Wall -Wextra -pedantic -g $(addprefix -D, $(OPTIONS))
 
 .PHONY: all check clean debug release
 
 debug: CFLAGS += -O0 -ggdb3 -DDEBUG
 debug: all
 
-release: CFLAGS += -O3 -fomit-frame-pointer -funroll-loops -DNDEBUG -DRELEASE
+release: CFLAGS += -O3 -DNDEBUG -DRELEASE
 release: all
 
 all: $(TARGET)
@@ -29,7 +27,7 @@ clean:
 	rm -f $(OBJECTS) $(DEPS) $(TARGET)
 
 $(TARGET): $(OBJECTS)
-	$(CC) $(CFLAGS) $(CPPFLAGS) -o $(TARGET) $(OBJECTS)
+	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ $^
 
 -include $(DEPS)
 

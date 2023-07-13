@@ -1,6 +1,5 @@
 #include <stdbool.h>
 #include <stddef.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -159,7 +158,8 @@ error(Node* const       cxt,
 } // error
 
 
-static Node* allele(char const** const ptr);
+static Node*
+allele(char const** const ptr);
 
 
 static Node*

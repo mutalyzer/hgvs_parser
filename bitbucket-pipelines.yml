@@ -1,8 +1,0 @@
-image: etews/gcc-expect-valgrind
-
-pipelines:
-  default:
-    - step:
-        script:
-          - make release OPTIONS='ANSI'
-          - make check
