@@ -9,4 +9,5 @@ jobs:
             - run: gcc --version
             - run: valgrind --version
             - uses: actions/checkout@v3
+            - shell: 'script -q -e -c "bash {0}"'
             - run: make OPTIONS=ANSI check
